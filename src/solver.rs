@@ -1,21 +1,21 @@
 use itertools::Itertools;
 
 use anyhow::Result;
-use grb::{*, prelude::GurobiSum};
+use grb::prelude::*;
 use ndarray::{Array3, Array2, Array1};
+use crate::csv_parser::Data;
 
-use crate::datastructures::*;
-pub fn solve(dataframe: &Dataframe, num_cores: usize) -> Result<Array1::<grb::Var>> {
+pub fn solve(data: &Data, num_cores: usize) -> Result<Array1::<grb::Var>> {
     let mut model = Model::new("portfolio_model")?;
-    let (n, m) = (dataframe.algorithms.len(), dataframe.instances.len());
+    let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a = Array3::<grb::Var>::from_shape_fn((m, n, num_cores), |(i, j, k)| add_binvar!(model, name: format!("a_{i}_{j}_{k}").as_str()).unwrap());
     let b = Array2::<grb::Var>::from_shape_fn((n, num_cores), |(j, k)| add_binvar!(model, name: format!("b_{j}_{k}").as_str()).unwrap());
     let assigned_resources_per_algo = Array1::<grb::Var>::from_shape_fn(n, |j| add_ctsvar!(model, name: format!("k_{j}").as_str(), bounds: 0..num_cores).unwrap());
     let q = Array1::<grb::Var>::from_shape_fn(m, |i| add_ctsvar!(model, name: format!("q_{i}").as_str(), bounds: ..).unwrap());
-    let best_per_instance = Array1::<f64>::ones(n);
+    let best_per_instance = &data.best_per_instance;
 
-    let e_min = Array3::<f64>::ones([m, n, num_cores]);
+    let e_min = &data.stats;
 
     // constraint 1
     let c_1 = a.indexed_iter()

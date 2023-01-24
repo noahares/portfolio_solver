@@ -13,4 +13,4 @@ serde = { version = "1", features = ["derive"] }
 anyhow = "1.0.51"
 itertools = "0.10.5"
 ndarray = "0.15.6"
-polars = { version = "0.26.1", features = ["lazy", "cross_join", "dtype-struct"] }
+polars = { version = "0.26.1", features = ["lazy", "cross_join", "dtype-struct", "ndarray"] }
