@@ -19,12 +19,12 @@ pub struct Datapoint {
 pub struct Dataframe {
     pub datapoints: Vec<Datapoint>,
     pub algorithms: Vec<Algorithm>,
-    pub instances: Vec<Instance>
+    pub instances: Vec<Instance>,
 }
 
 pub struct Statistics {
     pub mean: f64,
-    pub stddev: f64
+    pub stddev: f64,
 }
 
 // fn preprocess_dataframe(dataframe: &Dataframe) -> Result<HashMap<String, f64>> {
