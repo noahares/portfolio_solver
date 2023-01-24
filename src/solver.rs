@@ -24,7 +24,7 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Array1<grb::Var>> {
         },
     );
     let q = Array1::<grb::Var>::from_shape_fn(m, |i| {
-        add_ctsvar!(model, name: format!("q_{i}").as_str(), bounds: ..)
+        add_ctsvar!(model, name: format!("q_{i}").as_str(), bounds: 0..)
             .unwrap()
     });
     let best_per_instance = &data.best_per_instance;

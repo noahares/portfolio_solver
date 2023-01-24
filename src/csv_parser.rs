@@ -29,7 +29,7 @@ impl Data {
             "k".into(),
             "imbalance".into(),
             "km1".into(),
-            "partitionTime".into(),
+            "totalPartitionTime".into(),
         ];
         let target_columns = vec![
             "algorithm",
