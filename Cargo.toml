@@ -3,6 +3,7 @@ name = "portfolio_solver"
 version = "0.1.0"
 authors = ["Noah Wahl <noah.ares@yahoo.de>"]
 edition = "2021"
+rust-version = "1.66"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
