@@ -7,7 +7,8 @@ use portfolio_solver::solver;
 
 fn main() -> Result<()> {
     let csv_path = env::args().nth(1).unwrap();
-    let data = Data::new(&csv_path, 8)?;
-    let result = solver::solve(&data, 8)?;
+    let num_cores = env::args().nth(2).unwrap().parse().unwrap();
+    let data = Data::new(&csv_path, num_cores)?;
+    let result = solver::solve(&data, num_cores as usize)?;
     Ok(())
 }
