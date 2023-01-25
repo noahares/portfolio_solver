@@ -1,0 +1,8 @@
+{
+  "files": [
+    "data/sequential_m_hg/patoh_d.csv",
+    "data/sequential_m_hg/patoh_q.csv",
+    "data/sequential_m_hg/mt_kahypar_d_10.csv"
+  ],
+  "num_cores": 8
+}

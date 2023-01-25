@@ -1,15 +1,20 @@
 use anyhow::Result;
 use std::env;
+use std::fs;
 
 use portfolio_solver::csv_parser::Data;
+use portfolio_solver::datastructures::*;
 use portfolio_solver::portfolio_simulator;
 use portfolio_solver::solver;
 
 fn main() -> Result<()> {
-    let csv_path = env::args().nth(1).unwrap();
-    let num_cores = env::args().nth(2).unwrap().parse().unwrap();
-    let data = Data::new(&csv_path, num_cores)?;
-    let result = solver::solve(&data, num_cores as usize)?;
+    let config_path = env::args().nth(1).unwrap();
+    let config_str = fs::read_to_string(config_path)
+        .expect("Provided config file does not exist");
+    let config: Config = serde_json::from_str(&config_str)?;
+    let data = Data::new(&config.files, config.num_cores)?;
+    println!("{data}");
+    let result = solver::solve(&data, config.num_cores as usize)?;
     println!("{result:?}");
     println!("{:?}", data.algorithms);
     Ok(())

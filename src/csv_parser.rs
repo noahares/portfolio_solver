@@ -1,3 +1,4 @@
+use core::fmt;
 use itertools::{izip, Itertools};
 use ndarray::Shape;
 use polars::{
@@ -9,18 +10,26 @@ use std::ops::Mul;
 
 use anyhow::Result;
 
+use crate::datastructures::*;
+
 pub struct Data {
     pub df: DataFrame,
-    pub instances: ndarray::Array1<String>,
-    pub algorithms: ndarray::Array1<String>,
+    pub instances: ndarray::Array1<Instance>,
+    pub algorithms: ndarray::Array1<Algorithm>,
     pub best_per_instance: ndarray::Array1<f64>,
     pub stats: ndarray::Array3<f64>,
     pub num_instances: usize,
     pub num_algorithms: usize,
 }
 
+impl fmt::Display for Data {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "m: {}, n: {}", self.num_instances, self.num_algorithms)
+    }
+}
+
 impl Data {
-    pub fn new(path: &str, k: u32) -> Result<Self> {
+    pub fn new<T: AsRef<str>>(paths: &[T], k: u32) -> Result<Self> {
         let schema = Schema::from(
             vec![Field::new("km1", DataType::Float64)].into_iter(),
         );
@@ -47,14 +56,29 @@ impl Data {
             sort_order.extend(vec!["algorithm"].iter());
             sort_order
         };
-        let df = CsvReader::from_path(path)?
-            .with_comment_char(Some(b'#'))
-            .has_header(true)
-            .with_columns(Some(kahypar_columns.clone()))
-            .with_dtypes(Some(&schema))
-            .finish()?
-            .lazy()
-            .rename(kahypar_columns, target_columns)
+        let read_df = |path: &T| -> Result<LazyFrame> {
+            Ok(CsvReader::from_path(path.as_ref())?
+                .with_comment_char(Some(b'#'))
+                .has_header(true)
+                .with_columns(Some(kahypar_columns.clone()))
+                .with_dtypes(Some(&schema))
+                .finish()?
+                .lazy()
+                .rename(kahypar_columns.iter(), target_columns.iter())
+                .with_column(col("instance").apply(
+                    |s: Series| {
+                        Ok(s.utf8()?
+                            .into_no_null_iter()
+                            .map(|str| str.replace("scotch", "graph"))
+                            .collect())
+                    },
+                    GetOutput::from_type(DataType::Utf8),
+                )))
+        };
+
+        let dataframes: Vec<LazyFrame> =
+            paths.iter().map(|path| read_df(path).unwrap()).collect();
+        let df = concat(dataframes, false, false)?
             .sort_by_exprs(
                 sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>(),
                 vec![false; 3],
