@@ -140,7 +140,7 @@ fn best_per_instance(
     instance_fields: &[&str],
 ) -> Result<ndarray::Array1<f64>> {
     let best_per_instance = df
-        .groupby([&["instance"], instance_fields].concat())
+        .groupby_stable([&["instance"], instance_fields].concat())
         .agg([min("quality").alias("best")])
         .collect()?;
     Ok(best_per_instance
@@ -161,14 +161,13 @@ fn stats(
     }?;
 
     let stats = df
-        .groupby([&["algorithm", "instance"], instance_fields].concat())
+        .groupby_stable([&["algorithm", "instance"], instance_fields].concat())
         .agg([
             mean("quality").alias("mean_quality"),
             col("quality").std(1).alias("std_quality"),
         ])
         .cross_join(possible_repeats.lazy())
         .select([
-            col("algorithm"),
             col("instance"),
             col("sample_size"),
             as_struct(&[
@@ -218,9 +217,30 @@ fn stats(
 }
 
 fn expected_normdist_min(mean: f64, std: f64, sample_size: u32) -> f64 {
-    mean - std * expected_maximum_approximation(sample_size)
+    let result = mean - std * expected_maximum_approximation(sample_size);
+    assert!(result >= 0.0, "mean: {mean}, std: {std}, e_min: {result}");
+    result
 }
 
 fn expected_maximum_approximation(sample_size: u32) -> f64 {
     f64::sqrt(2.0 * f64::ln(sample_size as f64))
+}
+
+#[cfg(test)]
+mod tests {
+    use ndarray::arr1;
+
+    use crate::csv_parser::Data;
+
+    #[test]
+    fn test_dataframe() {
+        let csv_paths = vec!["data/test/algo1.csv", "data/test/algo2.csv"];
+        let num_cores = 2;
+        let data = Data::new(&csv_paths, num_cores)
+            .expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 2);
+        assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
+        assert_eq!(0, 1, "{:#?}", data.stats);
+    }
 }
