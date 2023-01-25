@@ -10,5 +10,7 @@ fn main() -> Result<()> {
     let num_cores = env::args().nth(2).unwrap().parse().unwrap();
     let data = Data::new(&csv_path, num_cores)?;
     let result = solver::solve(&data, num_cores as usize)?;
+    println!("{result:?}");
+    println!("{:?}", data.algorithms);
     Ok(())
 }

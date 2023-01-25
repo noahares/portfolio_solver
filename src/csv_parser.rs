@@ -3,6 +3,7 @@ use ndarray::Shape;
 use polars::{
     lazy::dsl::{as_struct, Expr, GetOutput},
     prelude::*,
+    series::IsSorted,
 };
 use std::ops::Mul;
 
@@ -66,14 +67,16 @@ impl Data {
                 .unique()?
                 .utf8()?
                 .into_no_null_iter()
-                .map(|s| s.to_string()),
+                .map(|s| s.to_string())
+                .sorted(),
         );
         let algorithms = ndarray::Array1::from_iter(
             df.column("algorithm")?
                 .unique()?
                 .utf8()?
                 .into_no_null_iter()
-                .map(|s| s.to_string()),
+                .map(|s| s.to_string())
+                .sorted(),
         );
         let instance_multiplier = instance_fields
             .iter()
@@ -95,6 +98,7 @@ impl Data {
                 k as usize,
             ])),
         )?;
+        assert_eq!(df.column("instance")?.is_sorted(), IsSorted::Ascending);
         Ok(Self {
             df,
             instances,

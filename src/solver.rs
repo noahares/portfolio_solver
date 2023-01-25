@@ -5,8 +5,9 @@ use anyhow::Result;
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
-pub fn solve(data: &Data, num_cores: usize) -> Result<Array1<grb::Var>> {
+pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
     let mut model = Model::new("portfolio_model")?;
+    model.set_param(param::NumericFocus, 1)?;
     let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a =
@@ -101,5 +102,7 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Array1<grb::Var>> {
     model.set_objective(objective_function, ModelSense::Minimize)?;
     model.write("portfolio_model.lp")?;
     model.optimize()?;
-    Ok(assigned_resources_per_algo)
+    let portfolio_selection =
+        model.get_obj_attr_batch(attr::X, assigned_resources_per_algo)?;
+    Ok(portfolio_selection)
 }
