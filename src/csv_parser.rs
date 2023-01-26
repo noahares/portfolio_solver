@@ -163,6 +163,7 @@ fn stats(
     let stats = df
         .groupby_stable([&["algorithm", "instance"], instance_fields].concat())
         .agg([
+            min("quality").alias("min_quality"),
             mean("quality").alias("mean_quality"),
             col("quality").std(1).alias("std_quality"),
         ])
@@ -174,24 +175,27 @@ fn stats(
                 col("mean_quality"),
                 col("std_quality"),
                 col("sample_size"),
+                col("min_quality"),
             ])
             .apply(
                 |s| {
                     let data = s.struct_()?;
-                    let (mean_series, std_series, sample_series) = (
+                    let (mean_series, std_series, sample_series, min_series) = (
                         &data.fields()[0].f64()?,
                         &data.fields()[1].f64()?,
                         &data.fields()[2].u32()?,
+                        &data.fields()[3].f64()?,
                     );
                     let result: Float64Chunked = izip!(
                         mean_series.into_iter(),
                         std_series.into_iter(),
-                        sample_series.into_iter()
+                        sample_series.into_iter(),
+                        min_series.into_iter()
                     )
-                    .map(|(opt_mean, opt_std, opt_s)| {
-                        match (opt_mean, opt_std, opt_s) {
-                            (Some(mean), Some(std), Some(s)) => {
-                                Some(expected_normdist_min(mean, std, s))
+                    .map(|(opt_mean, opt_std, opt_s, opt_min)| {
+                        match (opt_mean, opt_std, opt_s, opt_min) {
+                            (Some(mean), Some(std), Some(s), Some(min)) => {
+                                Some(expected_normdist_min(mean, std, s, min))
                             }
                             _ => None,
                         }
@@ -216,8 +220,8 @@ fn stats(
     Ok(stats_array)
 }
 
-fn expected_normdist_min(mean: f64, std: f64, sample_size: u32) -> f64 {
-    let result = mean - std * expected_maximum_approximation(sample_size);
+fn expected_normdist_min(mean: f64, std: f64, sample_size: u32, min: f64) -> f64 {
+    let result = (mean - std * expected_maximum_approximation(sample_size)).max(min);
     assert!(result >= 0.0, "mean: {mean}, std: {std}, e_min: {result}");
     result
 }
