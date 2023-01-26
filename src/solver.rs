@@ -18,12 +18,6 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
     let b = Array2::<grb::Var>::from_shape_fn((n, num_cores), |(j, k)| {
         add_binvar!(model, name: format!("b_{j}_{k}").as_str()).unwrap()
     });
-    let assigned_resources_per_algo = Array1::<grb::Var>::from_shape_fn(
-        n,
-        |j| {
-            add_ctsvar!(model, name: format!("k_{j}").as_str(), bounds: 0..num_cores).unwrap()
-        },
-    );
     let q = Array1::<grb::Var>::from_shape_fn(m, |i| {
         add_ctsvar!(model, name: format!("q_{i}").as_str(), bounds: 0..)
             .unwrap()
@@ -62,12 +56,12 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
         .into_iter()
         .map(|row| {
             row.into_iter()
-                .zip(assigned_resources_per_algo.iter())
-                .map(|(var, k)| *var * *k)
+                .zip(1..=num_cores)
+                .map(|(var, k)| *var * k)
                 .grb_sum()
         })
         .grb_sum();
-    let c_3 = model.add_qconstr("c3", c!(sums == num_cores));
+    let c_3 = model.add_constr("c3", c!(sums == num_cores));
 
     // constraint 4
     let c_4 = a
@@ -102,7 +96,28 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
     model.set_objective(objective_function, ModelSense::Minimize)?;
     model.write("portfolio_model.lp")?;
     model.optimize()?;
-    let portfolio_selection =
-        model.get_obj_attr_batch(attr::X, assigned_resources_per_algo)?;
+    let repeats_assignment =
+        model.get_obj_attr_batch(attr::X, b)?;
+    let mut portfolio_selection = vec![0.0; num_cores];
+    for j in 0..n {
+        for k in 0..num_cores {
+            portfolio_selection[j] += repeats_assignment[j * n + k] * (k + 1) as f64;
+        }
+    }
     Ok(portfolio_selection)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::csv_parser::Data;
+    use super::solve;
+
+    #[test]
+    fn test_simple_model() {
+        let csv_paths = vec!["data/test/algo1.csv", "data/test/algo2.csv"];
+        let num_cores = 2;
+        let data = Data::new(&csv_paths, num_cores)
+            .expect("Error while reading data");
+        assert_eq!(solve(&data, num_cores as usize).unwrap(), vec![0.0, 2.0]);
+    }
 }
