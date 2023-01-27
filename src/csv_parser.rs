@@ -56,52 +56,17 @@ impl Data {
             sort_order.extend(vec!["algorithm"].iter());
             sort_order
         };
-        let read_df = |path: &T| -> Result<LazyFrame> {
-            Ok(CsvReader::from_path(path.as_ref())?
-                .with_comment_char(Some(b'#'))
-                .has_header(true)
-                .with_columns(Some(kahypar_columns.clone()))
-                .with_dtypes(Some(&schema))
-                .finish()?
-                .lazy()
-                .rename(kahypar_columns.iter(), target_columns.iter())
-                .with_column(col("instance").apply(
-                    |s: Series| {
-                        Ok(s.utf8()?
-                            .into_no_null_iter()
-                            .map(|str| str.replace("scotch", "graph"))
-                            .collect())
-                    },
-                    GetOutput::from_type(DataType::Utf8),
-                )))
-        };
+        let df = preprocess_df(
+            paths,
+            schema,
+            kahypar_columns,
+            target_columns,
+            sort_order,
+        )?
+        .collect()?;
 
-        let dataframes: Vec<LazyFrame> =
-            paths.iter().map(|path| read_df(path).unwrap()).collect();
-        let df = concat(dataframes, false, false)?
-            .sort_by_exprs(
-                sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>(),
-                vec![false; 3],
-                false,
-            )
-            .collect()?;
-
-        let instances = ndarray::Array1::from_iter(
-            df.column("instance")?
-                .unique()?
-                .utf8()?
-                .into_no_null_iter()
-                .map(|s| s.to_string())
-                .sorted(),
-        );
-        let algorithms = ndarray::Array1::from_iter(
-            df.column("algorithm")?
-                .unique()?
-                .utf8()?
-                .into_no_null_iter()
-                .map(|s| s.to_string())
-                .sorted(),
-        );
+        let instances = extract_string_col(&df, "instance")?;
+        let algorithms = extract_string_col(&df, "algorithm")?;
         let instance_multiplier = instance_fields
             .iter()
             .map(|field| {
@@ -111,7 +76,12 @@ impl Data {
         let num_instances = instances.len() * instance_multiplier;
         let num_algorithms = algorithms.len();
         let best_per_instance =
-            best_per_instance(df.clone().lazy(), &instance_fields)?;
+            best_per_instance(df.clone().lazy(), &instance_fields)
+                .collect()?
+                .column("best")?
+                .f64()?
+                .to_ndarray()?
+                .to_owned();
         let stats = stats(
             df.clone().lazy(),
             k,
@@ -135,19 +105,61 @@ impl Data {
     }
 }
 
-fn best_per_instance(
-    df: LazyFrame,
-    instance_fields: &[&str],
-) -> Result<ndarray::Array1<f64>> {
-    let best_per_instance = df
-        .groupby_stable([&["instance"], instance_fields].concat())
+fn preprocess_df<T: AsRef<str>>(
+    paths: &[T],
+    schema: Schema,
+    in_fields: Vec<String>,
+    out_fields: Vec<&str>,
+    sort_order: Vec<&str>,
+) -> Result<LazyFrame> {
+    let read_df = |path: &T| -> Result<LazyFrame> {
+        Ok(CsvReader::from_path(path.as_ref())
+            .expect("No csv file found under {path}")
+            .with_comment_char(Some(b'#'))
+            .has_header(true)
+            .with_columns(Some(in_fields.clone()))
+            .with_dtypes(Some(&schema))
+            .finish()?
+            .lazy()
+            .rename(in_fields.iter(), out_fields.iter())
+            .with_column(col("instance").apply(
+                |s: Series| {
+                    Ok(s.utf8()?
+                        .into_no_null_iter()
+                        .map(|str| str.replace("scotch", "graph"))
+                        .collect())
+                },
+                GetOutput::from_type(DataType::Utf8),
+            )))
+    };
+
+    let dataframes: Vec<LazyFrame> =
+        paths.iter().map(|path| read_df(path).unwrap()).collect();
+    Ok(concat(dataframes, false, false)?.sort_by_exprs(
+        sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>(),
+        vec![false; 3],
+        false,
+    ))
+}
+
+fn extract_string_col(
+    df: &DataFrame,
+    column_name: &str,
+) -> Result<ndarray::Array1<String>> {
+    Ok(ndarray::Array1::from_iter(
+        df.column(column_name)
+            .expect("{column_name} not found in data frame")
+            .unique()?
+            .utf8()?
+            .into_no_null_iter()
+            .map(|s| s.to_string())
+            .sorted(),
+    ))
+}
+
+fn best_per_instance(df: LazyFrame, instance_fields: &[&str]) -> LazyFrame {
+    df.groupby_stable([&["instance"], instance_fields].concat())
         .agg([min("quality").alias("best")])
-        .collect()?;
-    Ok(best_per_instance
-        .column("best")?
-        .f64()?
-        .to_ndarray()?
-        .to_owned())
 }
 
 fn stats(
@@ -159,54 +171,74 @@ fn stats(
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
+    let best_per_instance = best_per_instance(df.clone(), instance_fields);
 
     let stats = df
         .groupby_stable([&["algorithm", "instance"], instance_fields].concat())
         .agg([
-            min("quality").alias("min_quality"),
             mean("quality").alias("mean_quality"),
             col("quality").std(1).alias("std_quality"),
         ])
+        .join(
+            best_per_instance,
+            [col("instance"), col("k")],
+            [col("instance"), col("k")],
+            JoinType::Inner,
+        )
         .cross_join(possible_repeats.lazy())
-        .select([
-            col("instance"),
-            col("sample_size"),
-            as_struct(&[
+        .select(
+            [
                 col("mean_quality"),
                 col("std_quality"),
                 col("sample_size"),
-                col("min_quality"),
-            ])
-            .apply(
-                |s| {
-                    let data = s.struct_()?;
-                    let (mean_series, std_series, sample_series, min_series) = (
-                        &data.fields()[0].f64()?,
-                        &data.fields()[1].f64()?,
-                        &data.fields()[2].u32()?,
-                        &data.fields()[3].f64()?,
-                    );
-                    let result: Float64Chunked = izip!(
-                        mean_series.into_iter(),
-                        std_series.into_iter(),
-                        sample_series.into_iter(),
-                        min_series.into_iter()
-                    )
-                    .map(|(opt_mean, opt_std, opt_s, opt_min)| {
-                        match (opt_mean, opt_std, opt_s, opt_min) {
-                            (Some(mean), Some(std), Some(s), Some(min)) => {
-                                Some(expected_normdist_min(mean, std, s, min))
+                col("best"),
+                as_struct(&[
+                    col("mean_quality"),
+                    col("std_quality"),
+                    col("sample_size"),
+                    col("best"),
+                ])
+                .apply(
+                    |s| {
+                        let data = s.struct_()?;
+                        let (
+                            mean_series,
+                            std_series,
+                            sample_series,
+                            min_series,
+                        ) = (
+                            &data.fields()[0].f64()?,
+                            &data.fields()[1].f64()?,
+                            &data.fields()[2].u32()?,
+                            &data.fields()[3].f64()?,
+                        );
+                        let result: Float64Chunked = izip!(
+                            mean_series.into_iter(),
+                            std_series.into_iter(),
+                            sample_series.into_iter(),
+                            min_series.into_iter()
+                        )
+                        .map(|(opt_mean, opt_std, opt_s, opt_min)| {
+                            match (opt_mean, opt_std, opt_s, opt_min) {
+                                (
+                                    Some(mean),
+                                    Some(std),
+                                    Some(s),
+                                    Some(min),
+                                ) => Some(expected_normdist_min(
+                                    mean, std, s, min,
+                                )),
+                                _ => None,
                             }
-                            _ => None,
-                        }
-                    })
-                    .collect();
-                    Ok(result.into_series())
-                },
-                GetOutput::from_type(DataType::Float64),
-            )
-            .alias("e_min"),
-        ])
+                        })
+                        .collect();
+                        Ok(result.into_series())
+                    },
+                    GetOutput::from_type(DataType::Float64),
+                )
+                .alias("e_min"),
+            ],
+        )
         .collect()?;
     let stats_array: ndarray::Array3<f64> =
         ndarray::Array3::<f64>::from_shape_vec(
@@ -220,8 +252,14 @@ fn stats(
     Ok(stats_array)
 }
 
-fn expected_normdist_min(mean: f64, std: f64, sample_size: u32, min: f64) -> f64 {
-    let result = (mean - std * expected_maximum_approximation(sample_size)).max(min);
+fn expected_normdist_min(
+    mean: f64,
+    std: f64,
+    sample_size: u32,
+    min: f64,
+) -> f64 {
+    let result =
+        (mean - std * expected_maximum_approximation(sample_size)).max(min);
     assert!(result >= 0.0, "mean: {mean}, std: {std}, e_min: {result}");
     result
 }
@@ -232,7 +270,7 @@ fn expected_maximum_approximation(sample_size: u32) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use ndarray::arr1;
+    use ndarray::{arr1, aview2, Axis};
 
     use crate::csv_parser::Data;
 
@@ -245,6 +283,9 @@ mod tests {
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
-        assert_eq!(0, 1, "{:#?}", data.stats);
+        assert_eq!(
+            data.stats.index_axis(Axis(2), 0),
+            aview2(&[[20.0, 18.0], [10.0, 8.0], [20.0, 24.0], [10.0, 11.0]])
+        );
     }
 }
