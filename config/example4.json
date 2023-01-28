@@ -1,0 +1,7 @@
+{
+  "files": [
+    "data/sequential_m_hg/hmetis_k.csv",
+    "data/sequential_m_hg/mondriaan.csv"
+  ],
+  "num_cores": 8
+}

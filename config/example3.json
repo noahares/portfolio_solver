@@ -1,0 +1,9 @@
+{
+  "files": [
+    "data/sequential_m_g/metis_r.csv",
+    "data/sequential_m_g/mt_kahypar_d_graph_10.csv",
+    "data/sequential_m_g/kaffpa_strongs.csv",
+    "data/sequential_m_g/scotch.csv"
+  ],
+  "num_cores": 8
+}
