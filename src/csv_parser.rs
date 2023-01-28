@@ -6,6 +6,7 @@ use polars::{
     prelude::*,
     series::IsSorted,
 };
+use std::f64::EPSILON;
 use std::ops::Mul;
 
 use anyhow::Result;
@@ -122,15 +123,26 @@ fn preprocess_df<T: AsRef<str>>(
             .finish()?
             .lazy()
             .rename(in_fields.iter(), out_fields.iter())
-            .with_column(col("instance").apply(
-                |s: Series| {
-                    Ok(s.utf8()?
-                        .into_no_null_iter()
-                        .map(|str| str.replace("scotch", "graph"))
-                        .collect())
-                },
-                GetOutput::from_type(DataType::Utf8),
-            )))
+            .with_columns([
+                col("instance").apply(
+                    |s: Series| {
+                        Ok(s.utf8()?
+                            .into_no_null_iter()
+                            .map(|str| str.replace("scotch", "graph"))
+                            .collect())
+                    },
+                    GetOutput::from_type(DataType::Utf8),
+                ),
+                col("quality").apply(
+                    |s: Series| {
+                        Ok(s.f64()?
+                            .into_no_null_iter()
+                            .map(|i| if i.abs() <= EPSILON { 1.0 } else { i })
+                            .collect())
+                    },
+                    GetOutput::from_type(DataType::Float64),
+                ),
+            ]))
     };
 
     let dataframes: Vec<LazyFrame> =
@@ -287,5 +299,16 @@ mod tests {
             data.stats.index_axis(Axis(2), 0),
             aview2(&[[20.0, 18.0], [10.0, 8.0], [20.0, 24.0], [10.0, 11.0]])
         );
+    }
+
+    #[test]
+    fn test_handle_quality_is_zero() {
+        let csv_paths = vec!["data/test/algo2.csv", "data/test/algo3.csv"];
+        let num_cores = 2;
+        let data = Data::new(&csv_paths, num_cores)
+            .expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 2);
+        assert_eq!(data.best_per_instance, arr1(&[1.0, 7.0, 22.0, 1.0]));
     }
 }
