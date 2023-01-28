@@ -104,6 +104,11 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
                 repeats_assignment[j * num_cores + k] * (k + 1) as f64;
         }
     }
+    dbg!(
+        "Objective value is: {}\n lower bound: {}",
+        model.get_attr(attr::ObjVal)?,
+        m
+    );
     Ok(portfolio_selection)
 }
 
