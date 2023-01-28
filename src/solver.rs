@@ -27,7 +27,7 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
     let e_min = &data.stats;
 
     // constraint 1
-    let c_1 = a
+    let _c_1 = a
         .indexed_iter()
         .map(|((i, j, k), &val_a)| {
             model.add_constr(
@@ -38,7 +38,7 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
         .collect_vec();
 
     // constraint 2
-    let c_2 = b
+    let _c_2 = b
         .rows()
         .into_iter()
         .enumerate()
@@ -61,10 +61,10 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
                 .grb_sum()
         })
         .grb_sum();
-    let c_3 = model.add_constr("c3", c!(sums == num_cores));
+    let _c_3 = model.add_constr("c3", c!(sums == num_cores));
 
     // constraint 4
-    let c_4 = a
+    let _c_4 = a
         .outer_iter()
         .into_iter()
         .enumerate()
@@ -77,7 +77,7 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
         .collect_vec();
 
     // constraint 5
-    let c_5 = a
+    let _c_5 = a
         .indexed_iter()
         .map(|((i, j, k), &val_a)| {
             model.add_constr(
