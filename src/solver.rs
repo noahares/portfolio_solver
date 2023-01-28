@@ -96,12 +96,12 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
     model.set_objective(objective_function, ModelSense::Minimize)?;
     model.write("portfolio_model.lp")?;
     model.optimize()?;
-    let repeats_assignment =
-        model.get_obj_attr_batch(attr::X, b)?;
-    let mut portfolio_selection = vec![0.0; num_cores];
+    let repeats_assignment = model.get_obj_attr_batch(attr::X, b)?;
+    let mut portfolio_selection = vec![0.0; n];
     for j in 0..n {
         for k in 0..num_cores {
-            portfolio_selection[j] += repeats_assignment[j * n + k] * (k + 1) as f64;
+            portfolio_selection[j] +=
+                repeats_assignment[j * num_cores + k] * (k + 1) as f64;
         }
     }
     Ok(portfolio_selection)
@@ -109,8 +109,8 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::csv_parser::Data;
     use super::solve;
+    use crate::csv_parser::Data;
 
     #[test]
     fn test_simple_model() {
