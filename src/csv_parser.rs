@@ -50,10 +50,9 @@ impl Data {
             "quality",
             "time",
         ];
-        let instance_fields = vec!["k"];
+        let instance_fields = vec!["instance", "k"];
         let sort_order = {
-            let mut sort_order = vec!["instance"];
-            sort_order.extend(instance_fields.iter());
+            let mut sort_order = instance_fields.clone();
             sort_order.extend(vec!["algorithm"].iter());
             sort_order
         };
@@ -68,21 +67,21 @@ impl Data {
 
         let instances = extract_string_col(&df, "instance")?;
         let algorithms = extract_string_col(&df, "algorithm")?;
-        let instance_multiplier = instance_fields
+        let num_instances = instance_fields
             .iter()
             .map(|field| {
                 Ok::<usize, PolarsError>(df.column(field)?.unique()?.len())
             })
             .fold_ok(1, Mul::mul)?;
-        let num_instances = instances.len() * instance_multiplier;
         let num_algorithms = algorithms.len();
         let best_per_instance =
-            best_per_instance(df.clone().lazy(), &instance_fields)
+            best_per_instance(df.clone().lazy(), &instance_fields, "quality")
                 .collect()?
-                .column("best")?
+                .column("best_quality")?
                 .f64()?
                 .to_ndarray()?
                 .to_owned();
+        assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let stats = stats(
             df.clone().lazy(),
             k,
@@ -115,7 +114,9 @@ fn preprocess_df<T: AsRef<str>>(
 ) -> Result<LazyFrame> {
     let read_df = |path: &T| -> Result<LazyFrame> {
         Ok(CsvReader::from_path(path.as_ref())
-            .expect("No csv file found under {path}")
+            .unwrap_or_else(|_| {
+                panic!("No csv file found under {}", path.as_ref())
+            })
             .with_comment_char(Some(b'#'))
             .has_header(true)
             .with_columns(Some(in_fields.clone()))
@@ -160,7 +161,9 @@ fn extract_string_col(
 ) -> Result<ndarray::Array1<String>> {
     Ok(ndarray::Array1::from_iter(
         df.column(column_name)
-            .expect("{column_name} not found in data frame")
+            .unwrap_or_else(|_| {
+                panic!("No column {} in dataframe", column_name)
+            })
             .unique()?
             .utf8()?
             .into_no_null_iter()
@@ -169,9 +172,13 @@ fn extract_string_col(
     ))
 }
 
-fn best_per_instance(df: LazyFrame, instance_fields: &[&str]) -> LazyFrame {
-    df.groupby_stable([&["instance"], instance_fields].concat())
-        .agg([min("quality").alias("best")])
+fn best_per_instance(
+    df: LazyFrame,
+    instance_fields: &[&str],
+    target_field: &str,
+) -> LazyFrame {
+    df.groupby_stable(instance_fields)
+        .agg([min(target_field).prefix("best_")])
 }
 
 fn stats(
@@ -183,32 +190,33 @@ fn stats(
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
-    let best_per_instance = best_per_instance(df.clone(), instance_fields);
+    let best_per_instance_df =
+        best_per_instance(df.clone(), instance_fields, "quality");
+    // let fastest_per_instance_df = best_per_instance(df.clone(), instance_fields, "time");
 
-    let stats = df
-        .groupby_stable([&["algorithm", "instance"], instance_fields].concat())
-        .agg([
-            mean("quality").alias("mean_quality"),
-            col("quality").std(1).alias("std_quality"),
-        ])
-        .join(
-            best_per_instance,
-            [col("instance"), col("k")],
-            [col("instance"), col("k")],
-            JoinType::Inner,
-        )
-        .cross_join(possible_repeats.lazy())
-        .select(
-            [
+    let stats =
+        df.groupby_stable([&["algorithm"], instance_fields].concat())
+            .agg([
+                mean("quality").prefix("mean_"),
+                col("quality").std(1).prefix("std_"),
+            ])
+            .join(
+                best_per_instance_df,
+                instance_fields.iter().map(|field| col(field)).collect_vec(),
+                instance_fields.iter().map(|field| col(field)).collect_vec(),
+                JoinType::Inner,
+            )
+            .cross_join(possible_repeats.lazy())
+            .select([
                 col("mean_quality"),
                 col("std_quality"),
                 col("sample_size"),
-                col("best"),
+                col("best_quality"),
                 as_struct(&[
                     col("mean_quality"),
                     col("std_quality"),
                     col("sample_size"),
-                    col("best"),
+                    col("best_quality"),
                 ])
                 .apply(
                     |s| {
@@ -249,9 +257,8 @@ fn stats(
                     GetOutput::from_type(DataType::Float64),
                 )
                 .alias("e_min"),
-            ],
-        )
-        .collect()?;
+            ])
+            .collect()?;
     let stats_array: ndarray::Array3<f64> =
         ndarray::Array3::<f64>::from_shape_vec(
             shape,
