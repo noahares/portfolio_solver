@@ -1,2 +1,4 @@
 target/
 playground/
+gurobi.log
+portfolio_model.lp
