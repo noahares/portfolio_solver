@@ -13,24 +13,16 @@ use anyhow::Result;
 
 use crate::datastructures::*;
 
-pub struct Data {
-    pub df: DataFrame,
-    pub instances: ndarray::Array1<Instance>,
-    pub algorithms: ndarray::Array1<Algorithm>,
-    pub best_per_instance: ndarray::Array1<f64>,
-    pub stats: ndarray::Array3<f64>,
-    pub num_instances: usize,
-    pub num_algorithms: usize,
+pub struct DataframeConfig<'a> {
+    schema: Schema,
+    in_fields: Vec<String>,
+    out_fields: Vec<&'a str>,
+    pub instance_fields: Vec<&'a str>,
+    sort_order: Vec<&'a str>,
 }
 
-impl fmt::Display for Data {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "m: {}, n: {}", self.num_instances, self.num_algorithms)
-    }
-}
-
-impl Data {
-    pub fn new<T: AsRef<str>>(paths: &[T], k: u32) -> Result<Self> {
+impl DataframeConfig<'_> {
+    pub fn new() -> Self {
         let schema = Schema::from(
             vec![Field::new("km1", DataType::Float64)].into_iter(),
         );
@@ -53,39 +45,71 @@ impl Data {
         let instance_fields = vec!["instance", "k"];
         let sort_order = {
             let mut sort_order = instance_fields.clone();
-            sort_order.extend(vec!["algorithm"].iter());
+            sort_order.extend(vec!["algorithm"]);
             sort_order
         };
-        let df = preprocess_df(
-            paths,
+        Self {
             schema,
-            kahypar_columns,
-            target_columns,
+            in_fields: kahypar_columns,
+            out_fields: target_columns,
+            instance_fields,
             sort_order,
-        )?
-        .collect()?;
+        }
+    }
+}
+
+impl Default for DataframeConfig<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct Data {
+    pub df: DataFrame,
+    pub instances: ndarray::Array1<Instance>,
+    pub algorithms: ndarray::Array1<Algorithm>,
+    pub best_per_instance: ndarray::Array1<f64>,
+    pub stats: ndarray::Array3<f64>,
+    pub num_instances: usize,
+    pub num_algorithms: usize,
+}
+
+impl fmt::Display for Data {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "m: {}, n: {}", self.num_instances, self.num_algorithms)
+    }
+}
+
+impl Data {
+    pub fn new<T: AsRef<str>>(paths: &[T], k: u32) -> Result<Self> {
+        let df_config = DataframeConfig::new();
+        let df = preprocess_df(paths, &df_config)?.collect()?;
 
         let instances = extract_string_col(&df, "instance")?;
         let algorithms = extract_string_col(&df, "algorithm")?;
-        let num_instances = instance_fields
+        let num_instances = df_config
+            .instance_fields
             .iter()
             .map(|field| {
                 Ok::<usize, PolarsError>(df.column(field)?.unique()?.len())
             })
             .fold_ok(1, Mul::mul)?;
         let num_algorithms = algorithms.len();
-        let best_per_instance =
-            best_per_instance(df.clone().lazy(), &instance_fields, "quality")
-                .collect()?
-                .column("best_quality")?
-                .f64()?
-                .to_ndarray()?
-                .to_owned();
+        let best_per_instance = best_per_instance(
+            df.clone().lazy(),
+            &df_config.instance_fields,
+            "quality",
+        )
+        .collect()?
+        .column("best_quality")?
+        .f64()?
+        .to_ndarray()?
+        .to_owned();
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let stats = stats(
             df.clone().lazy(),
             k,
-            &instance_fields,
+            &df_config.instance_fields,
             Shape::from(ndarray::Dim([
                 num_instances,
                 num_algorithms,
@@ -105,12 +129,9 @@ impl Data {
     }
 }
 
-fn preprocess_df<T: AsRef<str>>(
+pub fn preprocess_df<T: AsRef<str>>(
     paths: &[T],
-    schema: Schema,
-    in_fields: Vec<String>,
-    out_fields: Vec<&str>,
-    sort_order: Vec<&str>,
+    config: &DataframeConfig,
 ) -> Result<LazyFrame> {
     let read_df = |path: &T| -> Result<LazyFrame> {
         Ok(CsvReader::from_path(path.as_ref())
@@ -119,17 +140,17 @@ fn preprocess_df<T: AsRef<str>>(
             })
             .with_comment_char(Some(b'#'))
             .has_header(true)
-            .with_columns(Some(in_fields.clone()))
-            .with_dtypes(Some(&schema))
+            .with_columns(Some(config.in_fields.clone()))
+            .with_dtypes(Some(&config.schema))
             .finish()?
             .lazy()
-            .rename(in_fields.iter(), out_fields.iter())
+            .rename(config.in_fields.iter(), config.out_fields.iter())
             .with_columns([
                 col("instance").apply(
                     |s: Series| {
                         Ok(s.utf8()?
                             .into_no_null_iter()
-                            .map(|str| str.replace("scotch", "graph"))
+                            .map(fix_instance_names)
                             .collect())
                     },
                     GetOutput::from_type(DataType::Utf8),
@@ -149,10 +170,24 @@ fn preprocess_df<T: AsRef<str>>(
     let dataframes: Vec<LazyFrame> =
         paths.iter().map(|path| read_df(path).unwrap()).collect();
     Ok(concat(dataframes, false, false)?.sort_by_exprs(
-        sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>(),
+        config
+            .sort_order
+            .iter()
+            .map(|o| col(o))
+            .collect::<Vec<Expr>>(),
         vec![false; 3],
         false,
     ))
+}
+
+fn fix_instance_names(instance: &str) -> String {
+    if instance.ends_with("scotch") {
+        instance.replace("scotch", "graph")
+    } else if instance.ends_with("mtx") {
+        instance.replace("mtx", "mtx.hgr")
+    } else {
+        instance.to_string()
+    }
 }
 
 fn extract_string_col(
@@ -172,7 +207,7 @@ fn extract_string_col(
     ))
 }
 
-fn best_per_instance(
+pub fn best_per_instance(
     df: LazyFrame,
     instance_fields: &[&str],
     target_field: &str,

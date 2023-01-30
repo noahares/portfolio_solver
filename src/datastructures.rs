@@ -8,3 +8,9 @@ pub struct Config {
     pub files: Vec<String>,
     pub num_cores: u32,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct QualityLowerBoundConfig {
+    pub files: Vec<String>,
+    pub out: String,
+}

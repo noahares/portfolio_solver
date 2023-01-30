@@ -1,0 +1,18 @@
+{
+  "files": [
+    "data/sequential_m_g/kaffpa_eco.csv",
+    "data/sequential_m_g/kaffpa_ecos.csv",
+    "data/sequential_m_g/kaffpa_fast.csv",
+    "data/sequential_m_g/kaffpa_fasts.csv",
+    "data/sequential_m_g/kaffpa_strong.csv",
+    "data/sequential_m_g/kaffpa_strongs.csv",
+    "data/sequential_m_g/metis_k.csv",
+    "data/sequential_m_g/metis_r.csv",
+    "data/sequential_m_g/mt_kahypar_d_f_graph_10.csv",
+    "data/sequential_m_g/mt_kahypar_d_graph_10.csv",
+    "data/sequential_m_g/mt_kahypar_q_f_graph_10.csv",
+    "data/sequential_m_g/mt_kahypar_q_graph_10.csv",
+    "data/sequential_m_g/scotch.csv"
+  ],
+  "out": "data/m_g_quality_lb.csv"
+}
