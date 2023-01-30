@@ -3,5 +3,6 @@
     "data/sequential_m_hg/hmetis_k.csv",
     "data/sequential_m_hg/mondriaan.csv"
   ],
+  "quality_lb": "data/m_hg_quality_lb.csv",
   "num_cores": 8
 }

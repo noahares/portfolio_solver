@@ -5,5 +5,6 @@
     "data/sequential_m_g/kaffpa_ecos.csv",
     "data/sequential_m_g/mt_kahypar_q_graph_10.csv"
   ],
+  "quality_lb": "data/m_g_quality_lb.csv",
   "num_cores": 16
 }

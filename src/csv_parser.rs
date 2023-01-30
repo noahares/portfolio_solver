@@ -81,9 +81,14 @@ impl fmt::Display for Data {
 }
 
 impl Data {
-    pub fn new<T: AsRef<str>>(paths: &[T], k: u32) -> Result<Self> {
+    pub fn new(config: Config) -> Result<Self> {
+        let Config {
+            files: paths,
+            quality_lb: quality_lb_path,
+            num_cores: k,
+        } = config;
         let df_config = DataframeConfig::new();
-        let df = preprocess_df(paths, &df_config)?.collect()?;
+        let df = preprocess_df(paths.as_ref(), &df_config)?.collect()?;
 
         let instances = extract_string_col(&df, "instance")?;
         let algorithms = extract_string_col(&df, "algorithm")?;
@@ -105,6 +110,7 @@ impl Data {
         .f64()?
         .to_ndarray()?
         .to_owned();
+        let quality_lb = read_quality_lb(quality_lb_path)?;
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let stats = stats(
             df.clone().lazy(),
@@ -115,6 +121,7 @@ impl Data {
                 num_algorithms,
                 k as usize,
             ])),
+            quality_lb.lazy(),
         )?;
         assert_eq!(df.column("instance")?.is_sorted(), IsSorted::Ascending);
         Ok(Self {
@@ -180,6 +187,17 @@ pub fn preprocess_df<T: AsRef<str>>(
     ))
 }
 
+fn read_quality_lb(path: String) -> Result<DataFrame> {
+    Ok(CsvReader::from_path(&path)
+       .unwrap_or_else(|_| {
+           panic!("No csv file found under {}, generate it with the dedicated binary", path)
+       })
+       .with_comment_char(Some(b'#'))
+       .has_header(true)
+       .with_columns(Some(vec!["instance".to_string(), "k".into(), "quality_lb".into()]))
+       .finish()?)
+}
+
 fn fix_instance_names(instance: &str) -> String {
     if instance.ends_with("scotch") {
         instance.replace("scotch", "graph")
@@ -221,12 +239,11 @@ fn stats(
     sample_size: u32,
     instance_fields: &[&str],
     shape: Shape<ndarray::Dim<[usize; 3]>>,
+    quality_lb: LazyFrame,
 ) -> Result<ndarray::Array3<f64>> {
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
-    let best_per_instance_df =
-        best_per_instance(df.clone(), instance_fields, "quality");
     // let fastest_per_instance_df = best_per_instance(df.clone(), instance_fields, "time");
 
     let stats =
@@ -236,7 +253,7 @@ fn stats(
                 col("quality").std(1).prefix("std_"),
             ])
             .join(
-                best_per_instance_df,
+                quality_lb,
                 instance_fields.iter().map(|field| col(field)).collect_vec(),
                 instance_fields.iter().map(|field| col(field)).collect_vec(),
                 JoinType::Inner,
@@ -246,12 +263,12 @@ fn stats(
                 col("mean_quality"),
                 col("std_quality"),
                 col("sample_size"),
-                col("best_quality"),
+                col("quality_lb"),
                 as_struct(&[
                     col("mean_quality"),
                     col("std_quality"),
                     col("sample_size"),
-                    col("best_quality"),
+                    col("quality_lb"),
                 ])
                 .apply(
                     |s| {
@@ -326,14 +343,19 @@ fn expected_maximum_approximation(sample_size: u32) -> f64 {
 mod tests {
     use ndarray::{arr1, aview2, Axis};
 
-    use crate::csv_parser::Data;
+    use crate::{csv_parser::Data, datastructures::Config};
 
     #[test]
     fn test_dataframe() {
-        let csv_paths = vec!["data/test/algo1.csv", "data/test/algo2.csv"];
-        let num_cores = 2;
-        let data = Data::new(&csv_paths, num_cores)
-            .expect("Error while reading data");
+        let config = Config {
+            files: vec![
+                "data/test/algo1.csv".to_string(),
+                "data/test/algo2.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
@@ -345,10 +367,15 @@ mod tests {
 
     #[test]
     fn test_handle_quality_is_zero() {
-        let csv_paths = vec!["data/test/algo2.csv", "data/test/algo3.csv"];
-        let num_cores = 2;
-        let data = Data::new(&csv_paths, num_cores)
-            .expect("Error while reading data");
+        let config = Config {
+            files: vec![
+                "data/test/algo2.csv".to_string(),
+                "data/test/algo3.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[1.0, 7.0, 22.0, 1.0]));

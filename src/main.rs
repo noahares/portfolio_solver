@@ -13,8 +13,9 @@ fn main() -> Result<()> {
         .expect("Provided config file does not exist");
     let config: Config = serde_json::from_str(&config_str)
         .expect("Error while reading config file");
-    let data = Data::new(&config.files, config.num_cores)?;
-    let result = solver::solve(&data, config.num_cores as usize)?;
+    let k = config.num_cores;
+    let data = Data::new(config)?;
+    let result = solver::solve(&data, k as usize)?;
     dbg!(result);
     dbg!(data.algorithms);
     Ok(())

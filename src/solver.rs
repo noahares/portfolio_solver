@@ -111,14 +111,20 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
 #[cfg(test)]
 mod tests {
     use super::solve;
-    use crate::csv_parser::Data;
+    use crate::{csv_parser::Data, datastructures::Config};
 
     #[test]
     fn test_simple_model() {
-        let csv_paths = vec!["data/test/algo1.csv", "data/test/algo2.csv"];
-        let num_cores = 2;
-        let data = Data::new(&csv_paths, num_cores)
-            .expect("Error while reading data");
-        assert_eq!(solve(&data, num_cores as usize).unwrap(), vec![0.0, 2.0]);
+        let config = Config {
+            files: vec![
+                "data/test/algo1.csv".to_string(),
+                "data/test/algo2.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let k = config.num_cores;
+        let data = Data::new(config).expect("Error while reading data");
+        assert_eq!(solve(&data, k as usize).unwrap(), vec![0.0, 2.0]);
     }
 }
