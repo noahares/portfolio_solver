@@ -16,7 +16,6 @@ fn main() -> Result<()> {
     let k = config.num_cores;
     let data = Data::new(config)?;
     let result = solver::solve(&data, k as usize)?;
-    dbg!(result);
-    dbg!(data.algorithms);
+    println!("{result}");
     Ok(())
 }

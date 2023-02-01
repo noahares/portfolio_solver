@@ -1,3 +1,4 @@
+use crate::datastructures::*;
 use itertools::Itertools;
 
 use crate::csv_parser::Data;
@@ -5,9 +6,10 @@ use anyhow::Result;
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
-pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
+pub fn solve(data: &Data, num_cores: usize) -> Result<SolverResult> {
     let mut model = Model::new("portfolio_model")?;
     model.set_param(param::NumericFocus, 1)?;
+    // model.set_param(param::SolFiles, "portfolio_model".to_string())?;
     let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a =
@@ -93,25 +95,55 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<Vec<f64>> {
         .map(|(&var, &best)| var * (1.0 / best))
         .grb_sum();
 
+    let mut callback = |w: Where| {
+        if let Where::MIPSol(ctx) = w {
+            let sol = ctx.get_solution(b.iter())?;
+            let obj = ctx.obj()?;
+            let obj_bnd = ctx.obj_bnd()?;
+            let res =
+                postprocess_solution(sol, n, num_cores, &data.algorithms);
+            println!("{res}{}", 1.0 - (obj_bnd / obj));
+        }
+        Ok(())
+    };
+
     model.set_objective(objective_function, ModelSense::Minimize)?;
     model.write("portfolio_model.lp")?;
-    model.optimize()?;
-    let repeats_assignment = model.get_obj_attr_batch(attr::X, b)?;
+    model.optimize_with_callback(&mut callback)?;
+    let solution = model.get_obj_attr_batch(attr::X, b)?;
+    let result =
+        postprocess_solution(solution, n, num_cores, &data.algorithms);
+    dbg!(model.get_attr(attr::ObjVal)?, m);
+    Ok(result)
+}
+
+fn postprocess_solution(
+    solution: Vec<f64>,
+    n: usize,
+    num_cores: usize,
+    algorithms: &ndarray::Array1<Algorithm>,
+) -> SolverResult {
     let mut portfolio_selection = vec![0.0; n];
     for j in 0..n {
         for k in 0..num_cores {
             portfolio_selection[j] +=
-                repeats_assignment[j * num_cores + k] * (k + 1) as f64;
+                solution[j * num_cores + k] * (k + 1) as f64;
         }
     }
-    dbg!(model.get_attr(attr::ObjVal)?, m);
-    Ok(portfolio_selection)
+    let resource_assignments = algorithms
+        .iter()
+        .zip(portfolio_selection)
+        .map(|(algo, cores)| (algo.clone(), cores))
+        .collect_vec();
+    SolverResult {
+        resource_assignments,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::solve;
-    use crate::{csv_parser::Data, datastructures::Config};
+    use crate::{csv_parser::Data, datastructures::*};
 
     #[test]
     fn test_simple_model() {
@@ -125,6 +157,14 @@ mod tests {
         };
         let k = config.num_cores;
         let data = Data::new(config).expect("Error while reading data");
-        assert_eq!(solve(&data, k as usize).unwrap(), vec![0.0, 2.0]);
+        assert_eq!(
+            solve(&data, k as usize).unwrap(),
+            SolverResult {
+                resource_assignments: vec![
+                    ("algo1".into(), 0.0),
+                    ("algo2".into(), 2.0)
+                ]
+            }
+        );
     }
 }
