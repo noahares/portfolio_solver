@@ -33,6 +33,8 @@ impl DataframeConfig<'_> {
             "imbalance".into(),
             "km1".into(),
             "totalPartitionTime".into(),
+            "failed".into(),
+            "timeout".into(),
         ];
         let target_columns = vec![
             "algorithm",
@@ -41,6 +43,8 @@ impl DataframeConfig<'_> {
             "feasibility_score",
             "quality",
             "time",
+            "failed",
+            "timeout",
         ];
         let instance_fields = vec!["instance", "k"];
         let sort_order = {
@@ -90,15 +94,9 @@ impl Data {
         let df_config = DataframeConfig::new();
         let df = preprocess_df(paths.as_ref(), &df_config)?.collect()?;
 
-        let instances = extract_string_col(&df, "instance")?;
+        let instances = extract_instance_columns(&df)?;
         let algorithms = extract_string_col(&df, "algorithm")?;
-        let num_instances = df_config
-            .instance_fields
-            .iter()
-            .map(|field| {
-                Ok::<usize, PolarsError>(df.column(field)?.unique()?.len())
-            })
-            .fold_ok(1, Mul::mul)?;
+        let num_instances = instances.len();
         let num_algorithms = algorithms.len();
         let best_per_instance = best_per_instance(
             df.clone().lazy(),
@@ -112,17 +110,31 @@ impl Data {
         .to_owned();
         let quality_lb = read_quality_lb(quality_lb_path)?;
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
-        let stats = stats(
+        let shape = Shape::from(ndarray::Dim([
+            num_instances,
+            num_algorithms,
+            k as usize,
+        ]));
+
+        let stats_df = stats(
             df.clone().lazy(),
             k,
             &df_config.instance_fields,
-            Shape::from(ndarray::Dim([
-                num_instances,
-                num_algorithms,
-                k as usize,
-            ])),
             quality_lb.lazy(),
-        )?;
+        )?
+        .collect()?;
+
+        let clean_df = cleanup_missing_rows(stats_df, k)?;
+
+        let stats: ndarray::Array3<f64> =
+            ndarray::Array3::<f64>::from_shape_vec(
+                shape,
+                clean_df
+                    .column("e_min")?
+                    .f64()?
+                    .into_no_null_iter()
+                    .collect::<Vec<f64>>(),
+            )?;
         assert_eq!(df.column("instance")?.is_sorted(), IsSorted::Ascending);
         Ok(Self {
             df,
@@ -171,7 +183,10 @@ pub fn preprocess_df<T: AsRef<str>>(
                     },
                     GetOutput::from_type(DataType::Float64),
                 ),
-            ]))
+            ])
+            .filter(col("feasibility_score").lt_eq(0.03))
+            .filter(col("failed").str().contains("no"))
+            .filter(col("timeout").str().contains("no")))
     };
 
     let dataframes: Vec<LazyFrame> =
@@ -208,6 +223,29 @@ fn fix_instance_names(instance: &str) -> String {
     }
 }
 
+fn extract_instance_columns(
+    df: &DataFrame,
+) -> Result<ndarray::Array1<Instance>> {
+    let unique_instances_df = df
+        .clone()
+        .lazy()
+        .unique_stable(
+            Some(vec!["instance".to_string(), "k".into()]),
+            UniqueKeepStrategy::First,
+        )
+        .collect()?;
+    let instance_it = unique_instances_df
+        .column("instance")?
+        .utf8()?
+        .into_no_null_iter();
+    let k_it = unique_instances_df.column("k")?.i64()?.into_no_null_iter();
+    Ok(ndarray::Array1::from_iter(
+        instance_it
+            .zip(k_it)
+            .map(|(i, k)| Instance::new(i.to_string(), k as u32)),
+    ))
+}
+
 fn extract_string_col(
     df: &DataFrame,
     column_name: &str,
@@ -238,32 +276,32 @@ fn stats(
     df: LazyFrame,
     sample_size: u32,
     instance_fields: &[&str],
-    shape: Shape<ndarray::Dim<[usize; 3]>>,
     quality_lb: LazyFrame,
-) -> Result<ndarray::Array3<f64>> {
+) -> Result<LazyFrame> {
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
     // let fastest_per_instance_df = best_per_instance(df.clone(), instance_fields, "time");
 
-    let stats =
-        df.groupby_stable([&["algorithm"], instance_fields].concat())
-            .agg([
-                mean("quality").prefix("mean_"),
-                col("quality").std(1).prefix("std_"),
-            ])
-            .join(
-                quality_lb,
-                instance_fields.iter().map(|field| col(field)).collect_vec(),
-                instance_fields.iter().map(|field| col(field)).collect_vec(),
-                JoinType::Inner,
-            )
-            .cross_join(possible_repeats.lazy())
-            .select([
-                col("mean_quality"),
-                col("std_quality"),
+    Ok(df
+        .groupby_stable([&["algorithm"], instance_fields].concat())
+        .agg([
+            mean("quality").prefix("mean_"),
+            col("quality").std(1).prefix("std_"),
+        ])
+        .join(
+            quality_lb,
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            JoinType::Inner,
+        )
+        .cross_join(possible_repeats.lazy())
+        .select(
+            [
+                col("instance"),
+                col("k"),
+                col("algorithm"),
                 col("sample_size"),
-                col("quality_lb"),
                 as_struct(&[
                     col("mean_quality"),
                     col("std_quality"),
@@ -309,18 +347,8 @@ fn stats(
                     GetOutput::from_type(DataType::Float64),
                 )
                 .alias("e_min"),
-            ])
-            .collect()?;
-    let stats_array: ndarray::Array3<f64> =
-        ndarray::Array3::<f64>::from_shape_vec(
-            shape,
-            stats
-                .column("e_min")?
-                .f64()?
-                .into_no_null_iter()
-                .collect::<Vec<f64>>(),
-        )?;
-    Ok(stats_array)
+            ],
+        ))
 }
 
 fn expected_normdist_min(
@@ -337,6 +365,29 @@ fn expected_normdist_min(
 
 fn expected_maximum_approximation(sample_size: u32) -> f64 {
     f64::sqrt(2.0 * f64::ln(sample_size as f64))
+}
+
+fn cleanup_missing_rows(df: DataFrame, k: u32) -> Result<DataFrame> {
+    let algorithm_series =
+        df.column("algorithm")?.unique_stable()?.into_frame().lazy();
+    let graph_series =
+        df.column("instance")?.unique_stable()?.into_frame().lazy();
+    let k_series = df.column("k")?.unique_stable()?.into_frame().lazy();
+    let possible_repeats = df! {
+        "sample_size" => Vec::from_iter(1..=k)
+    }?;
+    let full_df = graph_series
+        .cross_join(k_series)
+        .cross_join(algorithm_series)
+        .cross_join(possible_repeats.lazy())
+        .collect()?;
+    Ok(df
+        .outer_join(
+            &full_df,
+            vec!["instance", "k", "algorithm", "sample_size"],
+            vec!["instance", "k", "algorithm", "sample_size"],
+        )?
+        .fill_null(FillNullStrategy::MaxBound)?)
 }
 
 #[cfg(test)]
@@ -379,5 +430,34 @@ mod tests {
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[1.0, 7.0, 22.0, 1.0]));
+    }
+
+    #[test]
+    fn test_handle_invalid_rows() {
+        let config = Config {
+            files: vec!["data/test/algo4.csv".to_string()],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let data = Data::new(config).expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 1);
+        assert_eq!(data.best_per_instance, arr1(&[20.0, 20.0, 20.0, 20.0]));
+    }
+
+    #[test]
+    fn test_missing_algo_for_instance() {
+        let config = Config {
+            files: vec![
+                "data/test/algo2.csv".to_string(),
+                "data/test/algo5.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let data = Data::new(config).expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 2);
+        assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 22.0, 9.0]));
     }
 }

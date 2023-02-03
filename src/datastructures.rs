@@ -1,8 +1,19 @@
 use core::fmt;
 use serde::{Deserialize, Serialize};
 
-pub type Instance = String;
 pub type Algorithm = String;
+
+#[derive(Debug)]
+pub struct Instance {
+    pub graph: String,
+    pub k: u32,
+}
+
+impl Instance {
+    pub fn new(graph: String, k: u32) -> Self {
+        Self { graph, k }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
