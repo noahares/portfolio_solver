@@ -73,6 +73,7 @@ pub struct Data {
     pub instances: ndarray::Array1<Instance>,
     pub algorithms: ndarray::Array1<Algorithm>,
     pub best_per_instance: ndarray::Array1<f64>,
+    pub best_per_instance_time: ndarray::Array1<f64>,
     pub stats: ndarray::Array3<f64>,
     pub num_instances: usize,
     pub num_algorithms: usize,
@@ -105,6 +106,16 @@ impl Data {
         )
         .collect()?
         .column("best_quality")?
+        .f64()?
+        .to_ndarray()?
+        .to_owned();
+        let best_per_instance_time = best_per_instance_time(
+            df.clone().lazy(),
+            &df_config.instance_fields,
+            "quality",
+        )
+        .collect()?
+        .column("time")?
         .f64()?
         .to_ndarray()?
         .to_owned();
@@ -141,6 +152,7 @@ impl Data {
             instances,
             algorithms,
             best_per_instance,
+            best_per_instance_time,
             stats,
             num_instances,
             num_algorithms,
@@ -270,6 +282,18 @@ pub fn best_per_instance(
 ) -> LazyFrame {
     df.groupby_stable(instance_fields)
         .agg([min(target_field).prefix("best_")])
+}
+
+fn best_per_instance_time(
+    df: LazyFrame,
+    instance_fields: &[&str],
+    target_field: &str,
+) -> LazyFrame {
+    df.groupby_stable(instance_fields)
+        .agg([col("*")
+            .sort_by(vec![col(target_field)], vec![false])
+            .first()])
+        .select([col("time")])
 }
 
 fn stats(
@@ -459,5 +483,21 @@ mod tests {
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 22.0, 9.0]));
+    }
+
+    #[test]
+    fn test_best_per_instance_time() {
+        let config = Config {
+            files: vec![
+                "data/test/algo1.csv".to_string(),
+                "data/test/algo6.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+        };
+        let data = Data::new(config).expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 2);
+        assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));
     }
 }
