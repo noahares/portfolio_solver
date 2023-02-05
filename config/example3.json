@@ -6,5 +6,6 @@
     "data/sequential_m_g/scotch.csv"
   ],
   "quality_lb": "data/m_g_quality_lb.csv",
-  "num_cores": 8
+  "num_cores": 8,
+  "slowdown_ratio": 2.0
 }

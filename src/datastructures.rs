@@ -20,6 +20,7 @@ pub struct Config {
     pub files: Vec<String>,
     pub quality_lb: String,
     pub num_cores: u32,
+    pub slowdown_ratio: f64,
 }
 
 #[derive(Serialize, Deserialize)]

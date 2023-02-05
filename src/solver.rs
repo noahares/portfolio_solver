@@ -154,6 +154,7 @@ mod tests {
             ],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
         };
         let k = config.num_cores;
         let data = Data::new(config).expect("Error while reading data");

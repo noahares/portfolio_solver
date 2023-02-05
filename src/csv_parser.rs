@@ -7,7 +7,6 @@ use polars::{
     series::IsSorted,
 };
 use std::f64::EPSILON;
-use std::ops::Mul;
 
 use anyhow::Result;
 
@@ -91,6 +90,7 @@ impl Data {
             files: paths,
             quality_lb: quality_lb_path,
             num_cores: k,
+            slowdown_ratio,
         } = config;
         let df_config = DataframeConfig::new();
         let df = preprocess_df(paths.as_ref(), &df_config)?.collect()?;
@@ -109,16 +109,18 @@ impl Data {
         .f64()?
         .to_ndarray()?
         .to_owned();
-        let best_per_instance_time = best_per_instance_time(
+        let best_per_instance_time_df = best_per_instance_time(
             df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
-        )
-        .collect()?
-        .column("time")?
-        .f64()?
-        .to_ndarray()?
-        .to_owned();
+        );
+        let best_per_instance_time = best_per_instance_time_df
+            .clone()
+            .collect()?
+            .column("best_time")?
+            .f64()?
+            .to_ndarray()?
+            .to_owned();
         let quality_lb = read_quality_lb(quality_lb_path)?;
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let shape = Shape::from(ndarray::Dim([
@@ -126,9 +128,30 @@ impl Data {
             num_algorithms,
             k as usize,
         ]));
+        let slowdown_ratio_df = df
+            .clone()
+            .lazy()
+            .join(
+                best_per_instance_time_df,
+                &df_config
+                    .instance_fields
+                    .iter()
+                    .map(|field| col(field))
+                    .collect_vec(),
+                &df_config
+                    .instance_fields
+                    .iter()
+                    .map(|field| col(field))
+                    .collect_vec(),
+                JoinType::Inner,
+            )
+            // .with_column(
+            //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
+            // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
+            .collect()?;
 
         let stats_df = stats(
-            df.clone().lazy(),
+            slowdown_ratio_df.lazy(),
             k,
             &df_config.instance_fields,
             quality_lb.lazy(),
@@ -293,7 +316,14 @@ fn best_per_instance_time(
         .agg([col("*")
             .sort_by(vec![col(target_field)], vec![false])
             .first()])
-        .select([col("time")])
+        .rename(["time"], ["best_time"])
+        .select(
+            [
+                instance_fields.iter().map(|field| col(field)).collect_vec(),
+                vec![col("best_time")],
+            ]
+            .concat(),
+        )
 }
 
 fn stats(
@@ -305,13 +335,20 @@ fn stats(
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
-    // let fastest_per_instance_df = best_per_instance(df.clone(), instance_fields, "time");
 
     Ok(df
         .groupby_stable([&["algorithm"], instance_fields].concat())
         .agg([
-            mean("quality").prefix("mean_"),
-            col("quality").std(1).prefix("std_"),
+            col("quality")
+                .filter(col("quality").lt(lit(std::f64::MAX)))
+                .mean()
+                .fill_null(lit(std::f64::MAX))
+                .prefix("mean_"),
+            col("quality")
+                .filter(col("quality").lt(lit(std::f64::MAX)))
+                .std(1)
+                .fill_null(lit(std::f64::MAX))
+                .prefix("std_"),
         ])
         .join(
             quality_lb,
@@ -429,6 +466,7 @@ mod tests {
             ],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
         };
         let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
@@ -449,6 +487,7 @@ mod tests {
             ],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
         };
         let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
@@ -462,6 +501,7 @@ mod tests {
             files: vec!["data/test/algo4.csv".to_string()],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
         };
         let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
@@ -478,6 +518,7 @@ mod tests {
             ],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
         };
         let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
@@ -494,6 +535,24 @@ mod tests {
             ],
             quality_lb: "data/test/quality_lb.csv".to_string(),
             num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
+        };
+        let data = Data::new(config).expect("Error while reading data");
+        assert_eq!(data.num_instances, 4);
+        assert_eq!(data.num_algorithms, 2);
+        assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));
+    }
+
+    #[test]
+    fn test_slowdown_ratio_filter() {
+        let config = Config {
+            files: vec![
+                "data/test/algo1.csv".to_string(),
+                "data/test/algo6.csv".into(),
+            ],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+            slowdown_ratio: 2.0,
         };
         let data = Data::new(config).expect("Error while reading data");
         assert_eq!(data.num_instances, 4);
