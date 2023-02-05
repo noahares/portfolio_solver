@@ -3,8 +3,6 @@ use polars::datatypes::*;
 use polars::prelude::Schema;
 use serde::{Deserialize, Serialize};
 
-pub type Algorithm = String;
-
 #[derive(Debug)]
 pub struct Instance {
     pub graph: String,
@@ -14,6 +12,27 @@ pub struct Instance {
 impl Instance {
     pub fn new(graph: String, k: u32) -> Self {
         Self { graph, k }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct Algorithm {
+    pub algorithm: String,
+    pub num_threads: u32,
+}
+
+impl Algorithm {
+    pub fn new(algorithm: String, num_threads: u32) -> Self {
+        Self {
+            algorithm,
+            num_threads,
+        }
+    }
+}
+
+impl fmt::Display for Algorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.algorithm, self.num_threads)
     }
 }
 
@@ -51,6 +70,7 @@ pub struct DataframeConfig<'a> {
     pub in_fields: Vec<String>,
     pub out_fields: Vec<&'a str>,
     pub instance_fields: Vec<&'a str>,
+    pub algorithm_fields: Vec<&'a str>,
     pub sort_order: Vec<&'a str>,
 }
 
@@ -61,6 +81,7 @@ impl DataframeConfig<'_> {
         );
         let kahypar_columns = vec![
             "algorithm".to_string(),
+            "num_threads".into(),
             "graph".into(),
             "k".into(),
             "imbalance".into(),
@@ -71,6 +92,7 @@ impl DataframeConfig<'_> {
         ];
         let target_columns = vec![
             "algorithm",
+            "num_threads",
             "instance",
             "k",
             "feasibility_score",
@@ -80,9 +102,10 @@ impl DataframeConfig<'_> {
             "timeout",
         ];
         let instance_fields = vec!["instance", "k"];
+        let algorithm_fields = vec!["algorithm", "num_threads"];
         let sort_order = {
             let mut sort_order = instance_fields.clone();
-            sort_order.extend(vec!["algorithm"]);
+            sort_order.extend(&algorithm_fields);
             sort_order
         };
         Self {
@@ -90,6 +113,7 @@ impl DataframeConfig<'_> {
             in_fields: kahypar_columns,
             out_fields: target_columns,
             instance_fields,
+            algorithm_fields,
             sort_order,
         }
     }

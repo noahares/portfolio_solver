@@ -1,4 +1,5 @@
 use crate::datastructures::*;
+use itertools::izip;
 use itertools::Itertools;
 
 use crate::csv_parser::Data;
@@ -56,10 +57,11 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<SolverResult> {
     let sums = b
         .rows()
         .into_iter()
-        .map(|row| {
+        .zip(&data.algorithms)
+        .map(|(row, algo)| {
             row.into_iter()
                 .zip(1..=num_cores)
-                .map(|(var, k)| *var * k)
+                .map(|(var, k)| *var * k * algo.num_threads)
                 .grb_sum()
         })
         .grb_sum();
@@ -162,8 +164,20 @@ mod tests {
             solve(&data, k as usize).unwrap(),
             SolverResult {
                 resource_assignments: vec![
-                    ("algo1".into(), 0.0),
-                    ("algo2".into(), 2.0)
+                    (
+                        Algorithm {
+                            algorithm: "algo1".into(),
+                            num_threads: 1
+                        },
+                        0.0
+                    ),
+                    (
+                        Algorithm {
+                            algorithm: "algo2".into(),
+                            num_threads: 1
+                        },
+                        2.0
+                    ),
                 ]
             }
         );

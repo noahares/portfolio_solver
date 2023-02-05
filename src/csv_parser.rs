@@ -1,6 +1,5 @@
 use core::fmt;
 use itertools::{izip, Itertools};
-use ndarray::Shape;
 use polars::{
     lazy::dsl::{as_struct, Expr, GetOutput},
     prelude::*,
@@ -40,8 +39,10 @@ impl Data {
         let df_config = DataframeConfig::new();
         let df = preprocess_df(paths.as_ref(), &df_config)?.collect()?;
 
-        let instances = extract_instance_columns(&df)?;
-        let algorithms = extract_string_col(&df, "algorithm")?;
+        let instances =
+            extract_instance_columns(&df, &df_config.instance_fields)?;
+        let algorithms =
+            extract_algorithm_columns(&df, &df_config.algorithm_fields)?;
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
         let best_per_instance_df = best_per_instance(
@@ -52,6 +53,7 @@ impl Data {
         .collect()?;
         let best_per_instance =
             column_to_f64_array(&best_per_instance_df, "best_quality")?;
+        assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let best_per_instance_time_df = best_per_instance_time(
             df.clone().lazy(),
             &df_config.instance_fields,
@@ -61,12 +63,6 @@ impl Data {
             &best_per_instance_time_df.collect()?,
             "best_time",
         )?;
-        assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
-        let shape = Shape::from(ndarray::Dim([
-            num_instances,
-            num_algorithms,
-            k as usize,
-        ]));
         let slowdown_ratio_df = filter_slowdown(
             df.clone().lazy(),
             &df_config.instance_fields,
@@ -79,15 +75,21 @@ impl Data {
             slowdown_ratio_df.lazy(),
             k,
             &df_config.instance_fields,
+            &df_config.algorithm_fields,
             quality_lb_path,
         )?
         .collect()?;
 
-        let clean_df = cleanup_missing_rows(stats_df, k)?;
+        let clean_df = cleanup_missing_rows(
+            stats_df,
+            k,
+            &df_config.instance_fields,
+            &df_config.algorithm_fields,
+        )?;
 
         let stats: ndarray::Array3<f64> =
             ndarray::Array3::<f64>::from_shape_vec(
-                shape,
+                (num_instances, num_algorithms, k as usize),
                 clean_df
                     .column("e_min")?
                     .f64()?
@@ -112,18 +114,21 @@ pub fn preprocess_df<T: AsRef<str>>(
     paths: &[T],
     config: &DataframeConfig,
 ) -> Result<LazyFrame> {
-    let read_df = |path: &T| -> Result<LazyFrame> {
+    let read_df = |path: &T,
+                   in_fields: &Vec<String>,
+                   out_fields: &Vec<&str>|
+     -> Result<LazyFrame> {
         Ok(CsvReader::from_path(path.as_ref())
             .unwrap_or_else(|_| {
                 panic!("No csv file found under {}", path.as_ref())
             })
             .with_comment_char(Some(b'#'))
             .has_header(true)
-            .with_columns(Some(config.in_fields.clone()))
+            .with_columns(Some(in_fields.to_vec()))
             .with_dtypes(Some(&config.schema))
             .finish()?
             .lazy()
-            .rename(config.in_fields.iter(), config.out_fields.iter())
+            .rename(in_fields.iter(), out_fields.iter())
             .with_columns([
                 col("instance").apply(
                     |s: Series| {
@@ -149,27 +154,53 @@ pub fn preprocess_df<T: AsRef<str>>(
             .filter(col("timeout").str().contains("no")))
     };
 
-    let dataframes: Vec<LazyFrame> =
-        paths.iter().map(|path| read_df(path).unwrap()).collect();
+    let mut fixed_in_fields = config.in_fields.clone();
+    fixed_in_fields.retain(|s| s != "num_threads");
+    let mut fixed_out_fields = config.out_fields.clone();
+    fixed_out_fields.retain(|&s| s != "num_threads");
+    let dataframes: Vec<LazyFrame> = paths
+        .iter()
+        .map(|path| {
+            match read_df(path, &config.in_fields, &config.out_fields) {
+                Ok(result) => result,
+                Err(_) => read_df(path, &fixed_in_fields, &fixed_out_fields)
+                    .unwrap()
+                    .with_column(lit(1_i64).alias("num_threads")),
+            }
+            .select(
+                &config
+                    .out_fields
+                    .iter()
+                    .map(|c| col(c))
+                    .collect::<Vec<Expr>>(),
+            )
+        })
+        .collect();
     Ok(concat(dataframes, false, false)?.sort_by_exprs(
         config
             .sort_order
             .iter()
             .map(|o| col(o))
             .collect::<Vec<Expr>>(),
-        vec![false; 3],
+        vec![
+            false;
+            config.instance_fields.len() + config.algorithm_fields.len()
+        ],
         false,
     ))
 }
 
-fn read_quality_lb(path: String) -> Result<DataFrame> {
+fn read_quality_lb(
+    path: String,
+    instance_fields: &[&str],
+) -> Result<DataFrame> {
     Ok(CsvReader::from_path(&path)
        .unwrap_or_else(|_| {
            panic!("No csv file found under {}, generate it with the dedicated binary", path)
        })
        .with_comment_char(Some(b'#'))
        .has_header(true)
-       .with_columns(Some(vec!["instance".to_string(), "k".into(), "quality_lb".into()]))
+       .with_columns(Some([instance_fields.iter().map(|s| s.to_string()).collect_vec(), vec!["quality_lb".to_string()]].concat()))
        .finish()?)
 }
 
@@ -185,12 +216,13 @@ fn fix_instance_names(instance: &str) -> String {
 
 fn extract_instance_columns(
     df: &DataFrame,
+    instance_fields: &[&str],
 ) -> Result<ndarray::Array1<Instance>> {
     let unique_instances_df = df
         .clone()
         .lazy()
         .unique_stable(
-            Some(vec!["instance".to_string(), "k".into()]),
+            Some(instance_fields.iter().map(|s| s.to_string()).collect_vec()),
             UniqueKeepStrategy::First,
         )
         .collect()?;
@@ -206,20 +238,30 @@ fn extract_instance_columns(
     ))
 }
 
-fn extract_string_col(
+fn extract_algorithm_columns(
     df: &DataFrame,
-    column_name: &str,
-) -> Result<ndarray::Array1<String>> {
+    algorithm_fields: &[&str],
+) -> Result<ndarray::Array1<Algorithm>> {
+    let unique_algorithm_df = df
+        .clone()
+        .lazy()
+        .unique_stable(
+            Some(algorithm_fields.iter().map(|s| s.to_string()).collect_vec()),
+            UniqueKeepStrategy::First,
+        )
+        .collect()?;
+    let algorithm_it = unique_algorithm_df
+        .column("algorithm")?
+        .utf8()?
+        .into_no_null_iter();
+    let num_threads = unique_algorithm_df
+        .column("num_threads")?
+        .i64()?
+        .into_no_null_iter();
     Ok(ndarray::Array1::from_iter(
-        df.column(column_name)
-            .unwrap_or_else(|_| {
-                panic!("No column {} in dataframe", column_name)
-            })
-            .unique()?
-            .utf8()?
-            .into_no_null_iter()
-            .map(|s| s.to_string())
-            .sorted(),
+        algorithm_it
+            .zip(num_threads)
+            .map(|(a, t)| Algorithm::new(a.to_string(), t as u32)),
     ))
 }
 
@@ -262,15 +304,21 @@ fn stats(
     df: LazyFrame,
     sample_size: u32,
     instance_fields: &[&str],
+    algorithm_fields: &[&str],
     quality_lb_path: String,
 ) -> Result<LazyFrame> {
-    let quality_lb = read_quality_lb(quality_lb_path)?;
+    let quality_lb = read_quality_lb(quality_lb_path, instance_fields)?;
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
 
+    let columns = [instance_fields, algorithm_fields, &["sample_size"]]
+        .concat()
+        .iter()
+        .map(|f| col(f))
+        .collect_vec();
     Ok(df
-        .groupby_stable([&["algorithm"], instance_fields].concat())
+        .groupby_stable([algorithm_fields, instance_fields].concat())
         .agg([
             col("quality")
                 .filter(col("quality").lt(lit(std::f64::MAX)))
@@ -292,11 +340,8 @@ fn stats(
         .cross_join(possible_repeats.lazy())
         .select(
             [
-                col("instance"),
-                col("k"),
-                col("algorithm"),
-                col("sample_size"),
-                as_struct(&[
+                columns,
+                [as_struct(&[
                     col("mean_quality"),
                     col("std_quality"),
                     col("sample_size"),
@@ -340,8 +385,10 @@ fn stats(
                     },
                     GetOutput::from_type(DataType::Float64),
                 )
-                .alias("e_min"),
-            ],
+                .alias("e_min")]
+                .to_vec(),
+            ]
+            .concat(),
         ))
 }
 
@@ -361,26 +408,31 @@ fn expected_maximum_approximation(sample_size: u32) -> f64 {
     f64::sqrt(2.0 * f64::ln(sample_size as f64))
 }
 
-fn cleanup_missing_rows(df: DataFrame, k: u32) -> Result<DataFrame> {
-    let algorithm_series =
-        df.column("algorithm")?.unique_stable()?.into_frame().lazy();
-    let graph_series =
-        df.column("instance")?.unique_stable()?.into_frame().lazy();
-    let k_series = df.column("k")?.unique_stable()?.into_frame().lazy();
+fn cleanup_missing_rows(
+    df: DataFrame,
+    k: u32,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+) -> Result<DataFrame> {
+    let algorithm_series = df
+        .select(algorithm_fields)?
+        .unique_stable(None, UniqueKeepStrategy::First)?
+        .lazy();
+    let instance_series = df
+        .select(instance_fields)?
+        .unique_stable(None, UniqueKeepStrategy::First)?
+        .lazy();
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=k)
     }?;
-    let full_df = graph_series
-        .cross_join(k_series)
+    let full_df = instance_series
         .cross_join(algorithm_series)
         .cross_join(possible_repeats.lazy())
         .collect()?;
+    let target_columns =
+        [instance_fields, algorithm_fields, &["sample_size"]].concat();
     Ok(df
-        .outer_join(
-            &full_df,
-            vec!["instance", "k", "algorithm", "sample_size"],
-            vec!["instance", "k", "algorithm", "sample_size"],
-        )?
+        .outer_join(&full_df, &target_columns, &target_columns)?
         .fill_null(FillNullStrategy::MaxBound)?)
 }
 
