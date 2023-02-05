@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         .expect("Error while reading config file");
     let paths = config.files;
 
-    let df_config = csv_parser::DataframeConfig::new();
+    let df_config = DataframeConfig::new();
     let df = csv_parser::preprocess_df(&paths, &df_config)
         .unwrap()
         .collect()?;
@@ -32,3 +32,13 @@ fn main() -> Result<()> {
     CsvWriter::new(&mut file).finish(&mut best_per_instance)?;
     Ok(())
 }
+
+// fn get_quality_lb(config: &csv_parser::DataframeConfig) -> Result<LazyFrame> {
+// }
+//
+// #[cfg(test)]
+// mod tests {
+//     #[test]
+//     fn test_quality_lb() {
+//     }
+// }

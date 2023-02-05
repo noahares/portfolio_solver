@@ -12,61 +12,6 @@ use anyhow::Result;
 
 use crate::datastructures::*;
 
-pub struct DataframeConfig<'a> {
-    schema: Schema,
-    in_fields: Vec<String>,
-    out_fields: Vec<&'a str>,
-    pub instance_fields: Vec<&'a str>,
-    sort_order: Vec<&'a str>,
-}
-
-impl DataframeConfig<'_> {
-    pub fn new() -> Self {
-        let schema = Schema::from(
-            vec![Field::new("km1", DataType::Float64)].into_iter(),
-        );
-        let kahypar_columns = vec![
-            "algorithm".to_string(),
-            "graph".into(),
-            "k".into(),
-            "imbalance".into(),
-            "km1".into(),
-            "totalPartitionTime".into(),
-            "failed".into(),
-            "timeout".into(),
-        ];
-        let target_columns = vec![
-            "algorithm",
-            "instance",
-            "k",
-            "feasibility_score",
-            "quality",
-            "time",
-            "failed",
-            "timeout",
-        ];
-        let instance_fields = vec!["instance", "k"];
-        let sort_order = {
-            let mut sort_order = instance_fields.clone();
-            sort_order.extend(vec!["algorithm"]);
-            sort_order
-        };
-        Self {
-            schema,
-            in_fields: kahypar_columns,
-            out_fields: target_columns,
-            instance_fields,
-            sort_order,
-        }
-    }
-}
-
-impl Default for DataframeConfig<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 pub struct Data {
     pub df: DataFrame,
     pub instances: ndarray::Array1<Instance>,
@@ -99,62 +44,42 @@ impl Data {
         let algorithms = extract_string_col(&df, "algorithm")?;
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
-        let best_per_instance = best_per_instance(
+        let best_per_instance_df = best_per_instance(
             df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
         )
-        .collect()?
-        .column("best_quality")?
-        .f64()?
-        .to_ndarray()?
-        .to_owned();
+        .collect()?;
+        let best_per_instance =
+            column_to_f64_array(&best_per_instance_df, "best_quality")?;
         let best_per_instance_time_df = best_per_instance_time(
             df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
         );
-        let best_per_instance_time = best_per_instance_time_df
-            .clone()
-            .collect()?
-            .column("best_time")?
-            .f64()?
-            .to_ndarray()?
-            .to_owned();
-        let quality_lb = read_quality_lb(quality_lb_path)?;
+        let best_per_instance_time = column_to_f64_array(
+            &best_per_instance_time_df.collect()?,
+            "best_time",
+        )?;
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let shape = Shape::from(ndarray::Dim([
             num_instances,
             num_algorithms,
             k as usize,
         ]));
-        let slowdown_ratio_df = df
-            .clone()
-            .lazy()
-            .join(
-                best_per_instance_time_df,
-                &df_config
-                    .instance_fields
-                    .iter()
-                    .map(|field| col(field))
-                    .collect_vec(),
-                &df_config
-                    .instance_fields
-                    .iter()
-                    .map(|field| col(field))
-                    .collect_vec(),
-                JoinType::Inner,
-            )
-            // .with_column(
-            //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
-            // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
-            .collect()?;
+        let slowdown_ratio_df = filter_slowdown(
+            df.clone().lazy(),
+            &df_config.instance_fields,
+            slowdown_ratio,
+            best_per_instance_df.lazy(),
+        )?
+        .collect()?;
 
         let stats_df = stats(
             slowdown_ratio_df.lazy(),
             k,
             &df_config.instance_fields,
-            quality_lb.lazy(),
+            quality_lb_path,
         )?
         .collect()?;
 
@@ -326,12 +251,20 @@ fn best_per_instance_time(
         )
 }
 
+fn column_to_f64_array(
+    df: &DataFrame,
+    column_name: &str,
+) -> Result<ndarray::Array1<f64>> {
+    Ok(df.column(column_name)?.f64()?.to_ndarray()?.to_owned())
+}
+
 fn stats(
     df: LazyFrame,
     sample_size: u32,
     instance_fields: &[&str],
-    quality_lb: LazyFrame,
+    quality_lb_path: String,
 ) -> Result<LazyFrame> {
+    let quality_lb = read_quality_lb(quality_lb_path)?;
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }?;
@@ -351,7 +284,7 @@ fn stats(
                 .prefix("std_"),
         ])
         .join(
-            quality_lb,
+            quality_lb.lazy(),
             instance_fields.iter().map(|field| col(field)).collect_vec(),
             instance_fields.iter().map(|field| col(field)).collect_vec(),
             JoinType::Inner,
@@ -449,6 +382,24 @@ fn cleanup_missing_rows(df: DataFrame, k: u32) -> Result<DataFrame> {
             vec!["instance", "k", "algorithm", "sample_size"],
         )?
         .fill_null(FillNullStrategy::MaxBound)?)
+}
+
+fn filter_slowdown(
+    df: LazyFrame,
+    instance_fields: &[&str],
+    slowdown_ratio: f64,
+    best_per_instance_time_df: LazyFrame,
+) -> Result<LazyFrame> {
+    Ok(
+        df.join(
+            best_per_instance_time_df,
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            JoinType::Inner,
+        ), // .with_column(
+           //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
+           // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
+    )
 }
 
 #[cfg(test)]

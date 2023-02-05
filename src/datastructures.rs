@@ -1,4 +1,6 @@
 use core::fmt;
+use polars::datatypes::*;
+use polars::prelude::Schema;
 use serde::{Deserialize, Serialize};
 
 pub type Algorithm = String;
@@ -40,5 +42,61 @@ impl fmt::Display for SolverResult {
             writeln!(f, "{}: {}", algo, cores)?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct DataframeConfig<'a> {
+    pub schema: Schema,
+    pub in_fields: Vec<String>,
+    pub out_fields: Vec<&'a str>,
+    pub instance_fields: Vec<&'a str>,
+    pub sort_order: Vec<&'a str>,
+}
+
+impl DataframeConfig<'_> {
+    pub fn new() -> Self {
+        let schema = Schema::from(
+            vec![Field::new("km1", DataType::Float64)].into_iter(),
+        );
+        let kahypar_columns = vec![
+            "algorithm".to_string(),
+            "graph".into(),
+            "k".into(),
+            "imbalance".into(),
+            "km1".into(),
+            "totalPartitionTime".into(),
+            "failed".into(),
+            "timeout".into(),
+        ];
+        let target_columns = vec![
+            "algorithm",
+            "instance",
+            "k",
+            "feasibility_score",
+            "quality",
+            "time",
+            "failed",
+            "timeout",
+        ];
+        let instance_fields = vec!["instance", "k"];
+        let sort_order = {
+            let mut sort_order = instance_fields.clone();
+            sort_order.extend(vec!["algorithm"]);
+            sort_order
+        };
+        Self {
+            schema,
+            in_fields: kahypar_columns,
+            out_fields: target_columns,
+            instance_fields,
+            sort_order,
+        }
+    }
+}
+
+impl Default for DataframeConfig<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
