@@ -1,4 +1,5 @@
 use anyhow::Result;
+use portfolio_solver::portfolio_simulator::simulate;
 use std::env;
 use std::fs;
 
@@ -18,5 +19,6 @@ fn main() -> Result<()> {
     println!("{data}");
     let result = solver::solve(&data, k as usize);
     println!("{result}");
+    simulate(&data, result, 42);
     Ok(())
 }
