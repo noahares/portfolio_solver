@@ -1,15 +1,14 @@
 use crate::datastructures::*;
-use itertools::izip;
 use itertools::Itertools;
 
 use crate::csv_parser::Data;
-use anyhow::Result;
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
-pub fn solve(data: &Data, num_cores: usize) -> Result<SolverResult> {
-    let mut model = Model::new("portfolio_model")?;
-    model.set_param(param::NumericFocus, 1)?;
+pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
+    let mut model =
+        Model::new("portfolio_model").expect("Failed to create Gurobi Model");
+    model.set_param(param::NumericFocus, 1).unwrap();
     // model.set_param(param::SolFiles, "portfolio_model".to_string())?;
     let (n, m) = (data.num_algorithms, data.num_instances);
 
@@ -109,14 +108,22 @@ pub fn solve(data: &Data, num_cores: usize) -> Result<SolverResult> {
         Ok(())
     };
 
-    model.set_objective(objective_function, ModelSense::Minimize)?;
-    model.write("portfolio_model.lp")?;
-    model.optimize_with_callback(&mut callback)?;
-    let solution = model.get_obj_attr_batch(attr::X, b)?;
+    model
+        .set_objective(objective_function, ModelSense::Minimize)
+        .expect("Failed to set objective function");
+    model
+        .write("portfolio_model.lp")
+        .expect("Failed to write model output file");
+    model
+        .optimize_with_callback(&mut callback)
+        .expect("Error in solution callback");
+    let solution = model
+        .get_obj_attr_batch(attr::X, b)
+        .expect("Model execution failed, no solution");
     let result =
         postprocess_solution(solution, n, num_cores, &data.algorithms);
-    dbg!(model.get_attr(attr::ObjVal)?, m);
-    Ok(result)
+    dbg!(model.get_attr(attr::ObjVal).unwrap(), m);
+    result
 }
 
 fn postprocess_solution(
@@ -159,9 +166,9 @@ mod tests {
             slowdown_ratio: std::f64::MAX,
         };
         let k = config.num_cores;
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(
-            solve(&data, k as usize).unwrap(),
+            solve(&data, k as usize),
             SolverResult {
                 resource_assignments: vec![
                     (

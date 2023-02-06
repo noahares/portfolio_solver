@@ -29,7 +29,7 @@ impl fmt::Display for Data {
 }
 
 impl Data {
-    pub fn new(config: Config) -> Result<Self> {
+    pub fn new(config: Config) -> Self {
         let Config {
             files: paths,
             quality_lb: quality_lb_path,
@@ -37,12 +37,14 @@ impl Data {
             slowdown_ratio,
         } = config;
         let df_config = DataframeConfig::new();
-        let df = preprocess_df(paths.as_ref(), &df_config)?.collect()?;
+        let df = preprocess_df(paths.as_ref(), &df_config)
+            .collect()
+            .expect("Failed to collect preprocessed dataframe");
 
         let instances =
-            extract_instance_columns(&df, &df_config.instance_fields)?;
+            extract_instance_columns(&df, &df_config.instance_fields);
         let algorithms =
-            extract_algorithm_columns(&df, &df_config.algorithm_fields)?;
+            extract_algorithm_columns(&df, &df_config.algorithm_fields);
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
         let best_per_instance_df = best_per_instance(
@@ -50,9 +52,10 @@ impl Data {
             &df_config.instance_fields,
             "quality",
         )
-        .collect()?;
+        .collect()
+        .expect("Failed to collect best_per_instance dataframe");
         let best_per_instance =
-            column_to_f64_array(&best_per_instance_df, "best_quality")?;
+            column_to_f64_array(&best_per_instance_df, "best_quality");
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let best_per_instance_time_df = best_per_instance_time(
             df.clone().lazy(),
@@ -60,16 +63,19 @@ impl Data {
             "quality",
         );
         let best_per_instance_time = column_to_f64_array(
-            &best_per_instance_time_df.collect()?,
+            &best_per_instance_time_df
+                .collect()
+                .expect("Failed to collect best_per_instance_time dataframe"),
             "best_time",
-        )?;
+        );
         let slowdown_ratio_df = filter_slowdown(
             df.clone().lazy(),
             &df_config.instance_fields,
             slowdown_ratio,
             best_per_instance_df.lazy(),
-        )?
-        .collect()?;
+        )
+        .collect()
+        .expect("Failed to collect slowdown_ratio dataframe");
 
         let stats_df = stats(
             slowdown_ratio_df.lazy(),
@@ -77,27 +83,37 @@ impl Data {
             &df_config.instance_fields,
             &df_config.algorithm_fields,
             quality_lb_path,
-        )?
-        .collect()?;
+        )
+        .expect(
+            "Something went very wrong, stats dataframe could not be created",
+        )
+        .collect()
+        .expect("Failed to collect stats dataframe");
 
         let clean_df = cleanup_missing_rows(
             stats_df,
             k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,
-        )?;
+        );
 
         let stats: ndarray::Array3<f64> =
             ndarray::Array3::<f64>::from_shape_vec(
                 (num_instances, num_algorithms, k as usize),
                 clean_df
-                    .column("e_min")?
-                    .f64()?
+                    .column("e_min")
+                    .expect("Something went very wrong, no `e_min` column")
+                    .f64()
+                    .expect("Something went very wrong, `e_min` column has unexpected type")
                     .into_no_null_iter()
                     .collect::<Vec<f64>>(),
-            )?;
-        assert_eq!(df.column("instance")?.is_sorted(), IsSorted::Ascending);
-        Ok(Self {
+            )
+            .expect("Failed to create stats array");
+        assert_eq!(
+            df.column("instance").unwrap().is_sorted(),
+            IsSorted::Ascending
+        );
+        Self {
             df,
             instances,
             algorithms,
@@ -106,14 +122,14 @@ impl Data {
             stats,
             num_instances,
             num_algorithms,
-        })
+        }
     }
 }
 
 pub fn preprocess_df<T: AsRef<str>>(
     paths: &[T],
     config: &DataframeConfig,
-) -> Result<LazyFrame> {
+) -> LazyFrame {
     let read_df = |path: &T,
                    in_fields: &Vec<String>,
                    out_fields: &Vec<&str>|
@@ -132,7 +148,8 @@ pub fn preprocess_df<T: AsRef<str>>(
             .with_columns([
                 col("instance").apply(
                     |s: Series| {
-                        Ok(s.utf8()?
+                        Ok(s.utf8()
+                            .expect("Field `instance` should be a string")
                             .into_no_null_iter()
                             .map(fix_instance_names)
                             .collect())
@@ -141,7 +158,8 @@ pub fn preprocess_df<T: AsRef<str>>(
                 ),
                 col("quality").apply(
                     |s: Series| {
-                        Ok(s.f64()?
+                        Ok(s.f64()
+                            .expect("Field `quality` should be a float")
                             .into_no_null_iter()
                             .map(|i| if i.abs() <= EPSILON { 1.0 } else { i })
                             .collect())
@@ -176,32 +194,32 @@ pub fn preprocess_df<T: AsRef<str>>(
             )
         })
         .collect();
-    Ok(concat(dataframes, false, false)?.sort_by_exprs(
-        config
-            .sort_order
-            .iter()
-            .map(|o| col(o))
-            .collect::<Vec<Expr>>(),
-        vec![
-            false;
-            config.instance_fields.len() + config.algorithm_fields.len()
-        ],
-        false,
-    ))
+    concat(dataframes, false, false)
+        .expect("Combining data from csv files failed")
+        .sort_by_exprs(
+            config
+                .sort_order
+                .iter()
+                .map(|o| col(o))
+                .collect::<Vec<Expr>>(),
+            vec![
+                false;
+                config.instance_fields.len() + config.algorithm_fields.len()
+            ],
+            false,
+        )
 }
 
-fn read_quality_lb(
-    path: String,
-    instance_fields: &[&str],
-) -> Result<DataFrame> {
-    Ok(CsvReader::from_path(&path)
+fn read_quality_lb(path: String, instance_fields: &[&str]) -> DataFrame {
+    CsvReader::from_path(&path)
        .unwrap_or_else(|_| {
            panic!("No csv file found under {}, generate it with the dedicated binary", path)
        })
        .with_comment_char(Some(b'#'))
        .has_header(true)
        .with_columns(Some([instance_fields.iter().map(|s| s.to_string()).collect_vec(), vec!["quality_lb".to_string()]].concat()))
-       .finish()?)
+       .finish()
+       .expect("Failed to read lower bound csv file")
 }
 
 fn fix_instance_names(instance: &str) -> String {
@@ -217,7 +235,7 @@ fn fix_instance_names(instance: &str) -> String {
 fn extract_instance_columns(
     df: &DataFrame,
     instance_fields: &[&str],
-) -> Result<ndarray::Array1<Instance>> {
+) -> ndarray::Array1<Instance> {
     let unique_instances_df = df
         .clone()
         .lazy()
@@ -225,23 +243,31 @@ fn extract_instance_columns(
             Some(instance_fields.iter().map(|s| s.to_string()).collect_vec()),
             UniqueKeepStrategy::First,
         )
-        .collect()?;
+        .collect()
+        .expect("Failed to extract instance columns");
     let instance_it = unique_instances_df
-        .column("instance")?
-        .utf8()?
+        .column("instance")
+        .expect("No field `instance`")
+        .utf8()
+        .expect("Field `instance` should be a string")
         .into_no_null_iter();
-    let k_it = unique_instances_df.column("k")?.i64()?.into_no_null_iter();
-    Ok(ndarray::Array1::from_iter(
+    let k_it = unique_instances_df
+        .column("k")
+        .expect("No field `k`")
+        .i64()
+        .expect("Field `k` should be a integer")
+        .into_no_null_iter();
+    ndarray::Array1::from_iter(
         instance_it
             .zip(k_it)
             .map(|(i, k)| Instance::new(i.to_string(), k as u32)),
-    ))
+    )
 }
 
 fn extract_algorithm_columns(
     df: &DataFrame,
     algorithm_fields: &[&str],
-) -> Result<ndarray::Array1<Algorithm>> {
+) -> ndarray::Array1<Algorithm> {
     let unique_algorithm_df = df
         .clone()
         .lazy()
@@ -249,20 +275,25 @@ fn extract_algorithm_columns(
             Some(algorithm_fields.iter().map(|s| s.to_string()).collect_vec()),
             UniqueKeepStrategy::First,
         )
-        .collect()?;
+        .collect()
+        .expect("Failed to extract instance columns");
     let algorithm_it = unique_algorithm_df
-        .column("algorithm")?
-        .utf8()?
+        .column("algorithm")
+        .expect("No field `algorithm`")
+        .utf8()
+        .expect("Field `algorithm` should be a string")
         .into_no_null_iter();
     let num_threads = unique_algorithm_df
-        .column("num_threads")?
-        .i64()?
+        .column("num_threads")
+        .expect("No field `num_threads`")
+        .i64()
+        .expect("Field `num_threads` should be a integer")
         .into_no_null_iter();
-    Ok(ndarray::Array1::from_iter(
+    ndarray::Array1::from_iter(
         algorithm_it
             .zip(num_threads)
             .map(|(a, t)| Algorithm::new(a.to_string(), t as u32)),
-    ))
+    )
 }
 
 pub fn best_per_instance(
@@ -296,8 +327,16 @@ fn best_per_instance_time(
 fn column_to_f64_array(
     df: &DataFrame,
     column_name: &str,
-) -> Result<ndarray::Array1<f64>> {
-    Ok(df.column(column_name)?.f64()?.to_ndarray()?.to_owned())
+) -> ndarray::Array1<f64> {
+    df.column(column_name)
+        .unwrap_or_else(|_| panic!("Field `{}` not found", column_name))
+        .f64()
+        .expect("Expected column with type float")
+        .to_ndarray()
+        .unwrap_or_else(|_| {
+            panic!("Failed to extract column `{}`", column_name)
+        })
+        .to_owned()
 }
 
 fn stats(
@@ -307,10 +346,11 @@ fn stats(
     algorithm_fields: &[&str],
     quality_lb_path: String,
 ) -> Result<LazyFrame> {
-    let quality_lb = read_quality_lb(quality_lb_path, instance_fields)?;
+    let quality_lb = read_quality_lb(quality_lb_path, instance_fields);
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
-    }?;
+    }
+    .unwrap();
 
     let columns = [instance_fields, algorithm_fields, &["sample_size"]]
         .concat()
@@ -413,27 +453,34 @@ fn cleanup_missing_rows(
     k: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
-) -> Result<DataFrame> {
+) -> DataFrame {
     let algorithm_series = df
-        .select(algorithm_fields)?
-        .unique_stable(None, UniqueKeepStrategy::First)?
+        .select(algorithm_fields)
+        .expect("Cleanup failed due to `algorithm_fields`")
+        .unique_stable(None, UniqueKeepStrategy::First)
+        .expect("Cleanup failed due to `algorithm_fields`")
         .lazy();
     let instance_series = df
-        .select(instance_fields)?
-        .unique_stable(None, UniqueKeepStrategy::First)?
+        .select(instance_fields)
+        .expect("Cleanup failed due to `instance_fields`")
+        .unique_stable(None, UniqueKeepStrategy::First)
+        .expect("Cleanup failed due to `instance_fields`")
         .lazy();
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=k)
-    }?;
+    }
+    .unwrap();
     let full_df = instance_series
         .cross_join(algorithm_series)
         .cross_join(possible_repeats.lazy())
-        .collect()?;
+        .collect()
+        .expect("Failed to create carthesian product dataframe");
     let target_columns =
         [instance_fields, algorithm_fields, &["sample_size"]].concat();
-    Ok(df
-        .outer_join(&full_df, &target_columns, &target_columns)?
-        .fill_null(FillNullStrategy::MaxBound)?)
+    df.outer_join(&full_df, &target_columns, &target_columns)
+        .expect("Failed to fill missing rows")
+        .fill_null(FillNullStrategy::MaxBound)
+        .expect("Failed to fix null values")
 }
 
 fn filter_slowdown(
@@ -441,17 +488,15 @@ fn filter_slowdown(
     instance_fields: &[&str],
     slowdown_ratio: f64,
     best_per_instance_time_df: LazyFrame,
-) -> Result<LazyFrame> {
-    Ok(
-        df.join(
-            best_per_instance_time_df,
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            JoinType::Inner,
-        ), // .with_column(
-           //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
-           // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
-    )
+) -> LazyFrame {
+    df.join(
+        best_per_instance_time_df,
+        instance_fields.iter().map(|field| col(field)).collect_vec(),
+        instance_fields.iter().map(|field| col(field)).collect_vec(),
+        JoinType::Inner,
+    ) // .with_column(
+      //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
+      // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
 }
 
 #[cfg(test)]
@@ -471,7 +516,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: std::f64::MAX,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
@@ -492,7 +537,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: std::f64::MAX,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[1.0, 7.0, 22.0, 1.0]));
@@ -506,7 +551,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: std::f64::MAX,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 1);
         assert_eq!(data.best_per_instance, arr1(&[20.0, 20.0, 20.0, 20.0]));
@@ -523,7 +568,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: std::f64::MAX,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 22.0, 9.0]));
@@ -540,7 +585,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: std::f64::MAX,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));
@@ -557,7 +602,7 @@ mod tests {
             num_cores: 2,
             slowdown_ratio: 2.0,
         };
-        let data = Data::new(config).expect("Error while reading data");
+        let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));

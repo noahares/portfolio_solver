@@ -14,8 +14,9 @@ fn main() -> Result<()> {
     let config: Config = serde_json::from_str(&config_str)
         .expect("Error while reading config file");
     let k = config.num_cores;
-    let data = Data::new(config)?;
-    let result = solver::solve(&data, k as usize)?;
+    let data = Data::new(config);
+    println!("{data}");
+    let result = solver::solve(&data, k as usize);
     println!("{result}");
     Ok(())
 }
