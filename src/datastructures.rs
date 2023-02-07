@@ -42,6 +42,8 @@ pub struct Config {
     pub quality_lb: String,
     pub num_cores: u32,
     pub slowdown_ratio: f64,
+    pub num_seeds: u32,
+    pub out_file: String,
 }
 
 #[derive(Serialize, Deserialize)]

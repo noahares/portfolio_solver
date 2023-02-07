@@ -35,6 +35,8 @@ impl Data {
             quality_lb: quality_lb_path,
             num_cores: k,
             slowdown_ratio,
+            num_seeds: _,
+            out_file: _,
         } = config;
         let df_config = DataframeConfig::new();
         let df = preprocess_df(paths.as_ref(), &df_config)
@@ -499,11 +501,41 @@ fn filter_slowdown(
       // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
 }
 
+pub fn df_to_csv_for_performance_profiles(
+    df: &DataFrame,
+    df_config: &DataframeConfig,
+    path: &str,
+) {
+    let mut out =
+        std::fs::File::create(path).expect("Failed to create output file");
+    let mut out_df = df
+        .clone()
+        .lazy()
+        .rename(&df_config.out_fields, &df_config.in_fields)
+        .collect()
+        .expect("Missmatching fields for output dataframe");
+    CsvWriter::new(&mut out)
+        .has_header(true)
+        .finish(&mut out_df)
+        .expect("Failed to write output file");
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::{arr1, aview2, Axis};
 
     use crate::{csv_parser::Data, datastructures::Config};
+
+    fn default_config() -> Config {
+        Config {
+            files: vec![],
+            quality_lb: "data/test/quality_lb.csv".to_string(),
+            num_cores: 2,
+            slowdown_ratio: std::f64::MAX,
+            num_seeds: 1,
+            out_file: "".to_string(),
+        }
+    }
 
     #[test]
     fn test_dataframe() {
@@ -512,9 +544,7 @@ mod tests {
                 "data/test/algo1.csv".to_string(),
                 "data/test/algo2.csv".into(),
             ],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
@@ -533,9 +563,7 @@ mod tests {
                 "data/test/algo2.csv".to_string(),
                 "data/test/algo3.csv".into(),
             ],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
@@ -547,9 +575,7 @@ mod tests {
     fn test_handle_invalid_rows() {
         let config = Config {
             files: vec!["data/test/algo4.csv".to_string()],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
@@ -564,9 +590,7 @@ mod tests {
                 "data/test/algo2.csv".to_string(),
                 "data/test/algo5.csv".into(),
             ],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
@@ -581,9 +605,7 @@ mod tests {
                 "data/test/algo1.csv".to_string(),
                 "data/test/algo6.csv".into(),
             ],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
@@ -598,9 +620,8 @@ mod tests {
                 "data/test/algo1.csv".to_string(),
                 "data/test/algo6.csv".into(),
             ],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
             slowdown_ratio: 2.0,
+            ..default_config()
         };
         let data = Data::new(config);
         assert_eq!(data.num_instances, 4);
