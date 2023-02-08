@@ -157,10 +157,21 @@ mod tests {
             simulation_df.lazy(),
             &["instance", "k"],
             2,
+        )
+        .collect()
+        .unwrap();
+        assert_eq!(portfolio_df.height(), 4);
+        assert_eq!(
+            portfolio_df
+                .sort(["quality"], false)
+                .unwrap()
+                .column("quality")
+                .unwrap()
+                .f64()
+                .unwrap()
+                .to_ndarray()
+                .unwrap(),
+            ndarray::Array1::from_vec(vec![7.0, 9.0, 16.0, 22.0])
         );
-        // println!("{portfolio_df}");
-        // println!("{:?}", portfolio_df.get_column_names());
-        // assert_eq!(0, 1);
-        // TODO:  better assertions and new test algorithm
     }
 }

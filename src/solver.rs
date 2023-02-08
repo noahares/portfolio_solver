@@ -198,4 +198,39 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_seq_vs_par() {
+        let config = Config {
+            files: vec![
+                "data/test/algo1.csv".to_string(),
+                "data/test/algo7.csv".into(),
+            ],
+            num_cores: 8,
+            ..default_config()
+        };
+        let k = config.num_cores;
+        let data = Data::new(config);
+        assert_eq!(
+            solve(&data, k as usize),
+            SolverResult {
+                resource_assignments: vec![
+                    (
+                        Algorithm {
+                            algorithm: "algo1".into(),
+                            num_threads: 1
+                        },
+                        4.0
+                    ),
+                    (
+                        Algorithm {
+                            algorithm: "algo7".into(),
+                            num_threads: 4
+                        },
+                        1.0
+                    ),
+                ]
+            }
+        );
+    }
 }
