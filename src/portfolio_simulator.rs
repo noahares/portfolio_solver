@@ -71,9 +71,10 @@ fn portfolio_run_from_samples(
     instance_fields: &[&str],
     num_cores: u32,
 ) -> LazyFrame {
-    df.filter(col("feasibility_score").lt_eq(lit(0.03)))
-        .filter(col("failed").eq(lit("no")))
-        .filter(col("timeout").eq(lit("no")))
+    df
+        // .filter(col("feasibility_score").lt_eq(lit(0.03)))
+        // .filter(col("failed").eq(lit("no")))
+        // .filter(col("timeout").eq(lit("no")))
         .groupby(instance_fields)
         .agg([
             lit("portfolio-solver").alias("algorithm"),
