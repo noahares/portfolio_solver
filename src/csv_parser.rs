@@ -66,6 +66,7 @@ impl Data {
         );
         let best_per_instance_time = column_to_f64_array(
             &best_per_instance_time_df
+                .clone()
                 .collect()
                 .expect("Failed to collect best_per_instance_time dataframe"),
             "best_time",
@@ -74,7 +75,7 @@ impl Data {
             df.clone().lazy(),
             &df_config.instance_fields,
             slowdown_ratio,
-            best_per_instance_df.lazy(),
+            best_per_instance_time_df,
         )
         .collect()
         .expect("Failed to collect slowdown_ratio dataframe");
