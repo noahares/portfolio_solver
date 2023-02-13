@@ -1,0 +1,17 @@
+{
+  "files": [
+    "data/parallel_m_hg/bipart.csv",
+    "data/parallel_m_hg/zoltan.csv",
+    "data/sequential_m_hg/mt_kahypar_d_1.csv",
+    "data/sequential_m_hg/mt_kahypar_d_2.csv",
+    "data/sequential_m_hg/mt_kahypar_d_4.csv",
+    "data/sequential_m_hg/mt_kahypar_d_8.csv",
+    "data/sequential_m_hg/mt_kahypar_d_10.csv",
+    "data/sequential_m_hg/mt_kahypar_d_16.csv"
+  ],
+  "quality_lb": "data/m_hg_quality_lb.csv",
+  "num_cores": 32,
+  "slowdown_ratio": 2.0,
+  "num_seeds": 10,
+  "out_file": "results/example6.csv"
+}

@@ -1,0 +1,14 @@
+{
+  "files": [
+    "data/sequential_m_hg/hmetis_k.csv",
+    "data/sequential_m_hg/mondriaan.csv",
+    "data/sequential_m_hg/patoh_d.csv",
+    "data/sequential_m_hg/patoh_q.csv",
+    "data/sequential_m_hg/mt_kahypar_d_10.csv"
+  ],
+  "quality_lb": "data/m_hg_quality_lb.csv",
+  "num_cores": 32,
+  "slowdown_ratio": 2.0,
+  "num_seeds": 10,
+  "out_file": "results/example5.csv"
+}
