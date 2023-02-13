@@ -72,11 +72,13 @@ impl Data {
                 .expect("Failed to collect best_per_instance_time dataframe"),
             "best_time",
         );
+        let slowdown_penalty = std::f64::MAX / num_instances as f64;
         let slowdown_ratio_df = filter_slowdown(
             df.clone().lazy(),
             &df_config.instance_fields,
             slowdown_ratio,
             best_per_instance_time_df,
+            slowdown_penalty,
         )
         .collect()
         .expect("Failed to collect slowdown_ratio dataframe");
@@ -376,11 +378,13 @@ fn stats(
         .groupby_stable([algorithm_fields, instance_fields].concat())
         .agg([
             col("quality")
+                // NOTE: this filter does probably nothing atm
                 .filter(col("quality").lt(lit(std::f64::MAX)))
                 .mean()
                 .fill_null(lit(std::f64::MAX))
                 .prefix("mean_"),
             col("quality")
+                // NOTE: this filter does probably nothing atm
                 .filter(col("quality").lt(lit(std::f64::MAX)))
                 .std(1)
                 .fill_null(lit(std::f64::MAX))
@@ -503,15 +507,21 @@ fn filter_slowdown(
     instance_fields: &[&str],
     slowdown_ratio: f64,
     best_per_instance_time_df: LazyFrame,
+    slowdown_penalty: f64,
 ) -> LazyFrame {
     df.join(
         best_per_instance_time_df,
         instance_fields.iter().map(|field| col(field)).collect_vec(),
         instance_fields.iter().map(|field| col(field)).collect_vec(),
         JoinType::Inner,
-    ) // .with_column(
-      //     when(col("time").lt(col("best_time") * lit(slowdown_ratio))).then(col("quality")).otherwise(std::f64::MAX).alias("quality"))
-      // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
+    )
+    .with_column(
+        when(col("time").lt(col("best_time") * lit(slowdown_ratio)))
+            .then(col("quality"))
+            .otherwise(slowdown_penalty)
+            .alias("quality"),
+    )
+    // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
 }
 
 pub fn df_to_csv_for_performance_profiles(
