@@ -112,20 +112,20 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
     let start_vals = data
         .best_per_instance_count
         .iter()
-        .map(|count| {
-            ((count / data.num_instances as f64) * num_cores as f64).floor()
+        .zip(&data.algorithms)
+        .map(|(count, a)| {
+            (((count / data.num_instances as f64) * num_cores as f64).floor()
+                / a.num_threads as f64)
+                .round()
         })
         .collect_vec();
-    for ((i, v), a) in start_vals.iter().enumerate().zip(&data.algorithms) {
+    dbg!(&start_vals);
+    for (i, v) in start_vals.iter().enumerate() {
         if v.abs() <= std::f64::EPSILON {
             continue;
         }
         model
-            .set_obj_attr(
-                attr::Start,
-                &b[(i, (*v / a.num_threads as f64) as usize - 1)],
-                1.0,
-            )
+            .set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)
             .expect("Failed to set initial solution");
     }
     model
