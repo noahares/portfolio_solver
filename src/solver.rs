@@ -10,6 +10,7 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
         Model::new("portfolio_model").expect("Failed to create Gurobi Model");
     model.set_param(param::NumericFocus, 1).unwrap();
     // model.set_param(param::SolFiles, "portfolio_model".to_string())?;
+    model.set_param(param::TimeLimit, 900.0).unwrap();
     let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a =
@@ -108,6 +109,25 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
         Ok(())
     };
 
+    let start_vals = data
+        .best_per_instance_count
+        .iter()
+        .map(|count| {
+            ((count / data.num_instances as f64) * num_cores as f64).floor()
+        })
+        .collect_vec();
+    for ((i, v), a) in start_vals.iter().enumerate().zip(&data.algorithms) {
+        if v.abs() <= std::f64::EPSILON {
+            continue;
+        }
+        model
+            .set_obj_attr(
+                attr::Start,
+                &b[(i, (*v / a.num_threads as f64) as usize - 1)],
+                1.0,
+            )
+            .expect("Failed to set initial solution");
+    }
     model
         .set_objective(objective_function, ModelSense::Minimize)
         .expect("Failed to set objective function");

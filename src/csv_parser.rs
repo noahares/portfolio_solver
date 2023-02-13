@@ -17,6 +17,7 @@ pub struct Data {
     pub algorithms: ndarray::Array1<Algorithm>,
     pub best_per_instance: ndarray::Array1<f64>,
     pub best_per_instance_time: ndarray::Array1<f64>,
+    pub best_per_instance_count: ndarray::Array1<f64>,
     pub stats: ndarray::Array3<f64>,
     pub num_instances: usize,
     pub num_algorithms: usize,
@@ -80,6 +81,16 @@ impl Data {
         .collect()
         .expect("Failed to collect slowdown_ratio dataframe");
 
+        let best_per_instance_count = column_to_f64_array(
+            &best_per_instance_count(
+                df.clone(),
+                &df_config.instance_fields,
+                &df_config.algorithm_fields,
+                "quality",
+            ),
+            "count",
+        );
+
         let stats_df = stats(
             slowdown_ratio_df.lazy(),
             k,
@@ -122,6 +133,7 @@ impl Data {
             algorithms,
             best_per_instance,
             best_per_instance_time,
+            best_per_instance_count,
             stats,
             num_instances,
             num_algorithms,
@@ -521,11 +533,46 @@ pub fn df_to_csv_for_performance_profiles(
         .expect("Failed to write output file");
 }
 
+fn best_per_instance_count(
+    df: DataFrame,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+    target_field: &str,
+) -> DataFrame {
+    let algorithm_series = df
+        .select(algorithm_fields)
+        .expect("Best per instance ranking failed due to `algorithm_fields`")
+        .unique_stable(None, UniqueKeepStrategy::First)
+        .expect("Best per instance ranking failed due to `algorithm_fields`");
+    df.lazy()
+        .groupby_stable(instance_fields)
+        .agg([col("*")
+            .sort_by(vec![col(target_field)], vec![false])
+            .first()])
+        .select(
+            algorithm_fields
+                .iter()
+                .map(|field| col(field))
+                .collect_vec(),
+        )
+        .groupby_stable(algorithm_fields)
+        .agg([count().alias("count").cast(DataType::Float64)])
+        .collect()
+        .expect("Error counting best per instance")
+        .outer_join(&algorithm_series, algorithm_fields, algorithm_fields)
+        .expect("Error filling best per instance count")
+        .fill_null(FillNullStrategy::Zero)
+        .expect("Error filling best per instance count")
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::{arr1, aview2, Axis};
+    use polars::prelude::*;
 
     use crate::{csv_parser::Data, datastructures::Config};
+
+    use super::best_per_instance_count;
 
     fn default_config() -> Config {
         Config {
@@ -628,5 +675,28 @@ mod tests {
         assert_eq!(data.num_instances, 4);
         assert_eq!(data.num_algorithms, 2);
         assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));
+    }
+
+    #[test]
+    fn test_best_per_instance_count() {
+        let instance_fields = &["instance", "k"];
+        let algorithm_fields = &["algorithm", "num_threads"];
+        let df = df! {
+            "instance" => ["graph1", "graph1", "graph1", "graph2", "graph2", "graph2"],
+            "k" => vec![2; 6],
+            "algorithm" => ["algo1", "algo2", "algo3", "algo1", "algo2", "algo3"],
+            "num_threads" => vec![1; 6],
+            "quality" => [1.0, 2.0, 2.0, 2.0, 1.0, 2.0],
+        }.unwrap();
+        let ranking = best_per_instance_count(
+            df,
+            instance_fields,
+            algorithm_fields,
+            "quality",
+        );
+        assert_eq!(
+            ranking["count"],
+            Series::from_vec("count", vec![1.0, 1.0, 0.0])
+        );
     }
 }
