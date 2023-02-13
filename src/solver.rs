@@ -109,23 +109,30 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
         Ok(())
     };
 
-    let start_vals = data
-        .best_per_instance_count
-        .iter()
-        .zip(&data.algorithms)
-        .map(|(count, a)| {
-            (((count / data.num_instances as f64) * num_cores as f64).floor()
-                / a.num_threads as f64)
-                .round()
-        })
-        .collect_vec();
-    dbg!(&start_vals);
-    for (i, v) in start_vals.iter().enumerate() {
+    for (i, j, k) in get_a_start(&data.stats, num_cores) {
+        model
+            .set_obj_attr(attr::Start, &a[(i, j, k)], 1.0)
+            .expect("Failed to set initial solution");
+    }
+    for (i, v) in get_b_start(
+        &data.best_per_instance_count,
+        &data.algorithms,
+        m,
+        num_cores,
+    )
+    .iter()
+    .enumerate()
+    {
         if v.abs() <= std::f64::EPSILON {
             continue;
         }
         model
             .set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)
+            .expect("Failed to set initial solution");
+    }
+    for (i, v) in data.best_per_instance.iter().enumerate() {
+        model
+            .set_obj_attr(attr::Start, &q[i], *v)
             .expect("Failed to set initial solution");
     }
     model
@@ -169,9 +176,46 @@ fn postprocess_solution(
     }
 }
 
+fn get_a_start(
+    stats: &ndarray::Array3<f64>,
+    num_cores: usize,
+) -> Vec<(usize, usize, usize)> {
+    stats
+        .outer_iter()
+        .enumerate()
+        .map(|(i, instance)| {
+            let pos = instance
+                .iter()
+                .position_min_by(|x, y| x.partial_cmp(y).unwrap())
+                .unwrap();
+            dbg!(pos);
+            let j = pos / num_cores;
+            let k = pos % num_cores;
+            (i, j, k)
+        })
+        .collect_vec()
+}
+
+fn get_b_start(
+    counts: &ndarray::Array1<f64>,
+    algorithms: &ndarray::Array1<Algorithm>,
+    m: usize,
+    num_cores: usize,
+) -> Vec<f64> {
+    counts
+        .iter()
+        .zip(algorithms)
+        .map(|(count, a)| {
+            (((count / m as f64) * num_cores as f64).floor()
+                / a.num_threads as f64)
+                .round()
+        })
+        .collect_vec()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::solve;
+    use super::{get_a_start, solve};
     use crate::{csv_parser::Data, datastructures::*};
 
     fn default_config() -> Config {
@@ -252,5 +296,14 @@ mod tests {
                 ]
             }
         );
+    }
+
+    #[test]
+    fn test_a_start_values() {
+        let stats = ndarray::array![
+            [[1.0, 2.0], [3.0, 4.0]],
+            [[7.0, 6.0], [5.0, 8.0]]
+        ];
+        assert_eq!(get_a_start(&stats, 2), vec![(0, 0, 0), (1, 1, 0)]);
     }
 }
