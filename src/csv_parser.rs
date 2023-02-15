@@ -114,9 +114,14 @@ impl Data {
             &df_config.algorithm_fields,
         );
 
+        let shape = (num_instances, num_algorithms, k as usize);
+        assert_eq!(
+            num_instances * num_algorithms * k as usize,
+            clean_df.height()
+        );
         let stats: ndarray::Array3<f64> =
             ndarray::Array3::<f64>::from_shape_vec(
-                (num_instances, num_algorithms, k as usize),
+                shape,
                 clean_df
                     .column("e_min")
                     .expect("Something went very wrong, no `e_min` column")

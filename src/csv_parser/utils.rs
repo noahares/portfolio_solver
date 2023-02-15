@@ -23,8 +23,6 @@ fn read_quality_lb(path: String, instance_fields: &[&str]) -> DataFrame {
 pub fn fix_instance_names(instance: &str) -> String {
     if instance.ends_with("scotch") {
         instance.replace("scotch", "graph")
-    } else if instance.ends_with("mtx") {
-        instance.replace("mtx", "mtx.hgr")
     } else {
         instance.to_string()
     }

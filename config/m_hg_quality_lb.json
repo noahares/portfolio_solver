@@ -6,12 +6,24 @@
     "data/sequential_m_hg/kahypar_k.csv",
     "data/sequential_m_hg/kahypar_r.csv",
     "data/sequential_m_hg/mondriaan.csv",
-    "data/sequential_m_hg/mt_kahypar_d_10.csv",
     "data/sequential_m_hg/mt_kahypar_d_f_10.csv",
     "data/sequential_m_hg/mt_kahypar_q_10.csv",
-    "data/sequential_m_hg/mt_kahypar_q_f_10.csv",
     "data/sequential_m_hg/patoh_d.csv",
-    "data/sequential_m_hg/patoh_q.csv"
+    "data/sequential_m_hg/patoh_q.csv",
+    "data/parallel_m_hg/mt_kahypar_d_1.csv",
+    "data/parallel_m_hg/mt_kahypar_d_2.csv",
+    "data/parallel_m_hg/mt_kahypar_d_4.csv",
+    "data/parallel_m_hg/mt_kahypar_d_8.csv",
+    "data/parallel_m_hg/mt_kahypar_d_10.csv",
+    "data/parallel_m_hg/mt_kahypar_d_16.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_1.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_2.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_4.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_8.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_10.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_16.csv",
+    "data/parallel_m_hg/bipart.csv",
+    "data/parallel_m_hg/zoltan.csv"
   ],
   "out": "data/m_hg_quality_lb.csv"
 }
