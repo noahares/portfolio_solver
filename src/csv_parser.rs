@@ -47,6 +47,17 @@ impl Data {
             .collect()
             .expect("Failed to collect preprocessed dataframe");
 
+        let valid_instance_df = df
+            .clone()
+            .lazy()
+            .filter(
+                col("feasibility_score").lt_eq(col("feasibility_threshold")),
+            )
+            .filter(col("failed").str().contains("no"))
+            .filter(col("timeout").str().contains("no"))
+            .collect()
+            .expect("Failed to collect valid instances dataframe");
+
         let instances =
             utils::extract_instance_columns(&df, &df_config.instance_fields);
         let algorithms =
@@ -54,7 +65,7 @@ impl Data {
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
         let best_per_instance_df = best_per_instance(
-            df.clone().lazy(),
+            valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
         )
@@ -64,7 +75,7 @@ impl Data {
             utils::column_to_f64_array(&best_per_instance_df, "best_quality");
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
         let best_per_instance_time_df = utils::best_per_instance_time(
-            df.clone().lazy(),
+            valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
         );
@@ -77,7 +88,7 @@ impl Data {
         );
         let slowdown_penalty = std::f64::MAX / num_instances as f64;
         let slowdown_ratio_df = utils::filter_slowdown(
-            df.clone().lazy(),
+            valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
             slowdown_ratio,
             best_per_instance_time_df,
@@ -88,7 +99,7 @@ impl Data {
 
         let best_per_instance_count = utils::column_to_f64_array(
             &utils::best_per_instance_count(
-                df.clone(),
+                valid_instance_df,
                 &df_config.instance_fields,
                 &df_config.algorithm_fields,
                 "quality",
@@ -191,12 +202,7 @@ pub fn preprocess_df<T: AsRef<str>>(
                     },
                     GetOutput::from_type(DataType::Float64),
                 ),
-            ])
-            .filter(
-                col("feasibility_score").lt_eq(col("feasibility_threshold")),
-            )
-            .filter(col("failed").str().contains("no"))
-            .filter(col("timeout").str().contains("no")))
+            ]))
     };
 
     let mut fixed_in_fields = config.in_fields.clone();
