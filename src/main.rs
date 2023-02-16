@@ -23,12 +23,13 @@ fn main() -> Result<()> {
     println!("{portfolio}");
     let portfolio_runs = portfolio_simulator::simulate_portfolio_execution(
         &data,
-        portfolio,
+        &portfolio,
         num_seeds,
         &df_config.instance_fields,
     );
     csv_parser::df_to_csv_for_performance_profiles(
         &portfolio_runs,
+        &portfolio,
         &df_config,
         &out_file,
     );

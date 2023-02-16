@@ -1,10 +1,12 @@
 use core::fmt;
+use itertools::Itertools;
 use polars::{
     lazy::dsl::{Expr, GetOutput},
     prelude::*,
     series::IsSorted,
 };
 use std::f64::EPSILON;
+use std::io::prelude::*;
 
 use anyhow::Result;
 
@@ -244,6 +246,7 @@ pub fn best_per_instance(
 
 pub fn df_to_csv_for_performance_profiles(
     df: &DataFrame,
+    portfolio: &SolverResult,
     df_config: &DataframeConfig,
     path: &str,
 ) {
@@ -259,6 +262,17 @@ pub fn df_to_csv_for_performance_profiles(
         .has_header(true)
         .finish(&mut out_df)
         .expect("Failed to write output file");
+    let mut file =
+        std::fs::OpenOptions::new().append(true).open(path).unwrap();
+    let portfolio_config = portfolio
+        .resource_assignments
+        .iter()
+        .map(|(algo, cores)| format!("# {}: {}\n", algo, cores))
+        .collect_vec()
+        .concat();
+    if let Err(e) = writeln!(file, "{portfolio_config}") {
+        eprintln!("Failed to print portfolio config to file: {}", e);
+    }
 }
 
 #[cfg(test)]

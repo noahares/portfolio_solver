@@ -4,7 +4,7 @@ use polars::prelude::*;
 
 pub fn simulate_portfolio_execution(
     data: &Data,
-    portfolio: SolverResult,
+    portfolio: &SolverResult,
     num_seeds: u32,
     instance_fields: &[&str],
 ) -> DataFrame {
@@ -14,7 +14,7 @@ pub fn simulate_portfolio_execution(
         .fold(0, |acc, a| acc + (a.1) as u32 * a.0.num_threads);
     let runs = (0..num_seeds)
         .map(|seed| {
-            let simulation_df = simulate(data, &portfolio, seed as u64);
+            let simulation_df = simulate(data, portfolio, seed as u64);
             portfolio_run_from_samples(
                 simulation_df,
                 instance_fields,
