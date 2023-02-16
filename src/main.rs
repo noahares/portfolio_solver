@@ -26,6 +26,7 @@ fn main() -> Result<()> {
         &portfolio,
         num_seeds,
         &df_config.instance_fields,
+        &df_config.algorithm_fields,
     );
     csv_parser::df_to_csv_for_performance_profiles(
         &portfolio_runs,

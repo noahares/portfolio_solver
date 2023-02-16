@@ -7,6 +7,7 @@ pub fn simulate_portfolio_execution(
     portfolio: &SolverResult,
     num_seeds: u32,
     instance_fields: &[&str],
+    algorithm_fields: &[&str],
 ) -> DataFrame {
     let num_cores = portfolio
         .resource_assignments
@@ -18,6 +19,7 @@ pub fn simulate_portfolio_execution(
             portfolio_run_from_samples(
                 simulation_df,
                 instance_fields,
+                algorithm_fields,
                 num_cores,
             )
         })
@@ -69,6 +71,7 @@ fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
 fn portfolio_run_from_samples(
     df: LazyFrame,
     instance_fields: &[&str],
+    algorithm_fields: &[&str],
     num_cores: u32,
 ) -> LazyFrame {
     df
@@ -81,11 +84,8 @@ fn portfolio_run_from_samples(
             lit(num_cores).alias("num_threads"),
             col("*")
                 .exclude(
-                    [
-                        instance_fields,
-                        &["algorithm", "quality", "time", "num_threads"],
-                    ]
-                    .concat(),
+                    [instance_fields, algorithm_fields, &["quality", "time"]]
+                        .concat(),
                 )
                 .sort_by(vec![col("quality")], vec![false])
                 .first(),
@@ -155,6 +155,7 @@ mod tests {
         let portfolio_df = portfolio_run_from_samples(
             simulation_df.lazy(),
             &["instance", "k", "feasibility_threshold"],
+            &["algorithm", "num_threads"],
             2,
         )
         .collect()
