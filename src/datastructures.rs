@@ -44,6 +44,9 @@ impl fmt::Display for Algorithm {
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub files: Vec<String>,
+    pub graphs: String,
+    pub ks: Vec<i64>,
+    pub feasibility_thresholds: Vec<f64>,
     pub quality_lb: String,
     pub num_cores: u32,
     pub slowdown_ratio: f64,

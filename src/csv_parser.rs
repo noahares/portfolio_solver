@@ -37,15 +37,37 @@ impl Data {
         let Config {
             files: paths,
             quality_lb: quality_lb_path,
+            graphs: graphs_path,
+            ks: num_parts,
+            feasibility_thresholds,
             num_cores: k,
             slowdown_ratio,
             num_seeds: _,
             out_file: _,
         } = config;
         let df_config = DataframeConfig::new();
-        let df = preprocess_df(paths.as_ref(), &df_config)
-            .collect()
-            .expect("Failed to collect preprocessed dataframe");
+        let df = utils::filter_desired_instances(
+            preprocess_df(paths.as_ref(), &df_config),
+            &graphs_path,
+            &num_parts,
+            &feasibility_thresholds,
+            &df_config.instance_fields,
+        )
+        .sort_by_exprs(
+            df_config
+                .sort_order
+                .iter()
+                .map(|o| col(o))
+                .collect::<Vec<Expr>>(),
+            vec![
+                false;
+                df_config.instance_fields.len()
+                    + df_config.algorithm_fields.len()
+            ],
+            false,
+        )
+        .collect()
+        .expect("Failed to collect preprocessed dataframe");
 
         let valid_instance_df = df
             .clone()
@@ -229,18 +251,6 @@ pub fn preprocess_df<T: AsRef<str>>(
         .collect();
     concat(dataframes, false, false)
         .expect("Combining data from csv files failed")
-        .sort_by_exprs(
-            config
-                .sort_order
-                .iter()
-                .map(|o| col(o))
-                .collect::<Vec<Expr>>(),
-            vec![
-                false;
-                config.instance_fields.len() + config.algorithm_fields.len()
-            ],
-            false,
-        )
 }
 
 pub fn best_per_instance(

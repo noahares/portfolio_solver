@@ -330,3 +330,37 @@ pub fn best_per_instance_count(
         .fill_null(FillNullStrategy::Zero)
         .expect("Error filling best per instance count")
 }
+
+pub fn filter_desired_instances(
+    df: LazyFrame,
+    graphs_path: &String,
+    num_parts: &Vec<i64>,
+    feasibility_thresholds: &Vec<f64>,
+    instance_fields: &[&str],
+) -> LazyFrame {
+    if let Ok(reader) = CsvReader::from_path(graphs_path) {
+        let graph_df = reader
+            .has_header(true)
+            .finish()
+            .expect("Failed to read graphs file")
+            .lazy()
+            .rename(["graph"], ["instance"]);
+        let k_df = df! {
+            "k" => num_parts
+        }
+        .unwrap();
+        let eps_df = df! {
+            "feasibility_threshold" => feasibility_thresholds
+        }
+        .unwrap();
+        df.join(
+            graph_df.cross_join(k_df.lazy()).cross_join(eps_df.lazy()),
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            instance_fields.iter().map(|field| col(field)).collect_vec(),
+            JoinType::Inner,
+        )
+    } else {
+        println!("Provided graph file not found, using all graphs");
+        df
+    }
+}
