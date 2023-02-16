@@ -215,18 +215,7 @@ fn get_b_start(
 #[cfg(test)]
 mod tests {
     use super::{get_a_start, solve};
-    use crate::{csv_parser::Data, datastructures::*};
-
-    fn default_config() -> Config {
-        Config {
-            files: vec![],
-            quality_lb: "data/test/quality_lb.csv".to_string(),
-            num_cores: 2,
-            slowdown_ratio: std::f64::MAX,
-            num_seeds: 1,
-            out_file: "".to_string(),
-        }
-    }
+    use crate::{csv_parser::Data, datastructures::*, test_utils::*};
 
     #[test]
     fn test_simple_model() {
