@@ -44,14 +44,25 @@ impl fmt::Display for Algorithm {
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub files: Vec<String>,
+    #[serde(default)]
     pub graphs: String,
+    #[serde(default = "default_ks")]
     pub ks: Vec<i64>,
+    #[serde(default = "default_feasibility_thresholds")]
     pub feasibility_thresholds: Vec<f64>,
     pub quality_lb: String,
     pub num_cores: u32,
     pub slowdown_ratio: f64,
     pub num_seeds: u32,
     pub out_file: String,
+}
+
+fn default_ks() -> Vec<i64> {
+    vec![2, 4, 8, 16, 32, 64, 128]
+}
+
+fn default_feasibility_thresholds() -> Vec<f64> {
+    vec![0.03]
 }
 
 #[derive(Serialize, Deserialize)]
