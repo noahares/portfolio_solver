@@ -109,11 +109,11 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
         Ok(())
     };
 
-    for (i, j, k) in get_a_start(&data.stats, num_cores) {
-        model
-            .set_obj_attr(attr::Start, &a[(i, j, k)], 1.0)
-            .expect("Failed to set initial solution");
-    }
+    // for (i, j, k) in get_a_start(&data.stats, num_cores) {
+    //     model
+    //         .set_obj_attr(attr::Start, &a[(i, j, k)], 1.0)
+    //         .expect("Failed to set initial solution");
+    // }
     for (i, v) in get_b_start(
         &data.best_per_instance_count,
         &data.algorithms,
@@ -188,7 +188,6 @@ fn get_a_start(
                 .iter()
                 .position_min_by(|x, y| x.partial_cmp(y).unwrap())
                 .unwrap();
-            dbg!(pos);
             let j = pos / num_cores;
             let k = pos % num_cores;
             (i, j, k)
