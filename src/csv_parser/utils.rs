@@ -53,10 +53,15 @@ pub fn extract_instance_columns(
         .i64()
         .expect("Field `k` should be a integer")
         .into_no_null_iter();
+    let eps_it = unique_instances_df
+        .column("feasibility_threshold")
+        .expect("No field `feasibility_threshold`")
+        .f64()
+        .expect("Field `feasibility_threshold` should be a float")
+        .into_no_null_iter();
     ndarray::Array1::from_iter(
-        instance_it
-            .zip(k_it)
-            .map(|(i, k)| Instance::new(i.to_string(), k as u32)),
+        izip!(instance_it, k_it, eps_it)
+            .map(|(i, k, e)| Instance::new(i.to_string(), k as u32, e)),
     )
 }
 

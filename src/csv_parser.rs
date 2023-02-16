@@ -192,7 +192,9 @@ pub fn preprocess_df<T: AsRef<str>>(
                     GetOutput::from_type(DataType::Float64),
                 ),
             ])
-            .filter(col("feasibility_score").lt_eq(0.03))
+            .filter(
+                col("feasibility_score").lt_eq(col("feasibility_threshold")),
+            )
             .filter(col("failed").str().contains("no"))
             .filter(col("timeout").str().contains("no")))
     };

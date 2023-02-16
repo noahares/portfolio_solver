@@ -79,7 +79,6 @@ fn portfolio_run_from_samples(
         .agg([
             lit("portfolio-solver").alias("algorithm"),
             lit(num_cores).alias("num_threads"),
-            lit(0.03).alias("epsilon"),
             col("*")
                 .exclude(
                     [
@@ -155,7 +154,7 @@ mod tests {
             .any(|s| s == "algo1"));
         let portfolio_df = portfolio_run_from_samples(
             simulation_df.lazy(),
-            &["instance", "k"],
+            &["instance", "k", "feasibility_threshold"],
             2,
         )
         .collect()

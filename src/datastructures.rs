@@ -7,11 +7,16 @@ use serde::{Deserialize, Serialize};
 pub struct Instance {
     pub graph: String,
     pub k: u32,
+    pub feasibility_threshold: f64,
 }
 
 impl Instance {
-    pub fn new(graph: String, k: u32) -> Self {
-        Self { graph, k }
+    pub fn new(graph: String, k: u32, feasibility_threshold: f64) -> Self {
+        Self {
+            graph,
+            k,
+            feasibility_threshold,
+        }
     }
 }
 
@@ -86,6 +91,7 @@ impl DataframeConfig<'_> {
             "num_threads".into(),
             "graph".into(),
             "k".into(),
+            "epsilon".into(),
             "imbalance".into(),
             "km1".into(),
             "totalPartitionTime".into(),
@@ -97,13 +103,14 @@ impl DataframeConfig<'_> {
             "num_threads",
             "instance",
             "k",
+            "feasibility_threshold",
             "feasibility_score",
             "quality",
             "time",
             "failed",
             "timeout",
         ];
-        let instance_fields = vec!["instance", "k"];
+        let instance_fields = vec!["instance", "k", "feasibility_threshold"];
         let algorithm_fields = vec!["algorithm", "num_threads"];
         let sort_order = {
             let mut sort_order = instance_fields.clone();
