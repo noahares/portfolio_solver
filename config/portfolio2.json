@@ -1,0 +1,19 @@
+{
+  "files": [
+    "data/sequential_m_g/kaffpa_ecos.csv",
+    "data/sequential_m_g/kaffpa_strong.csv",
+    "data/sequential_m_g/kaffpa_strongs.csv",
+    "data/parallel_m_g/mt_kahypar_q_f_1.csv",
+    "data/parallel_m_g/mt_kahypar_q_f_2.csv",
+    "data/parallel_m_g/mt_kahypar_q_f_4.csv",
+    "data/parallel_m_g/mt_kahypar_q_f_8.csv",
+    "data/parallel_m_g/mt_kahypar_q_f_16.csv"
+  ],
+  "ks": [2, 4, 8, 16, 32, 64, 128],
+  "feasibility_thresholds": [0.03],
+  "quality_lb": "data/m_g_quality_lb.csv",
+  "num_cores": 32,
+  "slowdown_ratio": 2.0,
+  "num_seeds": 10,
+  "out_file": "results/portfolio2.csv"
+}

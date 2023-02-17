@@ -1,0 +1,20 @@
+{
+  "files": [
+    "data/sequential_m_hg/kahypar_k.csv",
+    "data/sequential_m_hg/kahypar_ca.csv",
+    "data/sequential_m_hg/hmetis_r.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_1.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_2.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_4.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_8.csv",
+    "data/parallel_m_hg/mt_kahypar_q_f_16.csv"
+  ],
+  "graphs": "data/set_m_hg_p.csv",
+  "ks": [2, 4, 8, 16, 32, 64, 128],
+  "feasibility_thresholds": [0.03],
+  "quality_lb": "data/m_hg_quality_lb.csv",
+  "num_cores": 32,
+  "slowdown_ratio": 2.0,
+  "num_seeds": 10,
+  "out_file": "results/portfolio1.csv"
+}

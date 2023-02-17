@@ -1,0 +1,14 @@
+{
+  "files": [
+    "data/parallel_m_g/kaminpar_64.csv",
+    "data/parallel_m_g/mt_kahip_64.csv",
+    "data/parallel_m_g/mt_kahypar_d_64.csv"
+  ],
+  "ks": [2, 4, 8, 16, 32, 64, 128],
+  "feasibility_thresholds": [0.03],
+  "quality_lb": "data/m_g_quality_lb.csv",
+  "num_cores": 256,
+  "slowdown_ratio": 2.0,
+  "num_seeds": 10,
+  "out_file": "results/portfolio5.csv"
+}
