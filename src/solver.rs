@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::datastructures::*;
 use itertools::Itertools;
 
@@ -130,11 +132,11 @@ pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
             .set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)
             .expect("Failed to set initial solution");
     }
-    for (i, v) in data.best_per_instance.iter().enumerate() {
-        model
-            .set_obj_attr(attr::Start, &q[i], *v)
-            .expect("Failed to set initial solution");
-    }
+    // for (i, v) in data.best_per_instance.iter().enumerate() {
+    //     model
+    //         .set_obj_attr(attr::Start, &q[i], *v)
+    //         .expect("Failed to set initial solution");
+    // }
     model
         .set_objective(objective_function, ModelSense::Minimize)
         .expect("Failed to set objective function");
@@ -201,20 +203,59 @@ fn get_b_start(
     m: usize,
     num_cores: usize,
 ) -> Vec<f64> {
-    counts
+    let fractions = counts
         .iter()
         .zip(algorithms)
         .map(|(count, a)| {
-            (((count / m as f64) * num_cores as f64).floor()
-                / a.num_threads as f64)
-                .round()
+            (count / m as f64) * (num_cores as f64 / a.num_threads as f64)
         })
-        .collect_vec()
+        .collect_vec();
+    let steps = algorithms.iter().map(|a| a.num_threads).collect_vec();
+    round_to_sum(&fractions, &steps, num_cores as u32)
+}
+
+fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
+    let (mut rounded, mut losses): (Vec<f64>, Vec<f64>) =
+        fractions.iter().map(|f| (f.floor(), f - f.floor())).unzip();
+    let mut remainder = sum
+        - rounded
+            .iter()
+            .zip(steps)
+            .fold(0, |acc, (v, s)| acc + *v as u32 * s);
+    while remainder > 0 {
+        if let Some(highest_loss_idx) = losses
+            .iter()
+            .zip(steps)
+            .position_max_by(|(l1, &s1), (l2, &s2)| {
+                if s1 <= remainder && s2 <= remainder {
+                    l1.partial_cmp(l2).unwrap()
+                } else if s1 > remainder {
+                    Ordering::Less
+                } else {
+                    Ordering::Greater
+                }
+            })
+        {
+            remainder -= steps[highest_loss_idx];
+            losses[highest_loss_idx] = 0.0;
+            rounded[highest_loss_idx] += 1.0;
+        } else {
+            break;
+        }
+    }
+    assert_eq!(
+        rounded
+            .iter()
+            .zip(steps)
+            .fold(0, |acc, (v, s)| acc + *v as u32 * s),
+        sum
+    );
+    rounded
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{get_a_start, solve};
+    use super::{get_a_start, round_to_sum, solve};
     use crate::{csv_parser::Data, datastructures::*, test_utils::*};
 
     #[test]
@@ -293,5 +334,16 @@ mod tests {
             [[7.0, 6.0], [5.0, 8.0]]
         ];
         assert_eq!(get_a_start(&stats, 2), vec![(0, 0, 0), (1, 1, 0)]);
+    }
+
+    #[test]
+    fn test_round_to_sum() {
+        let fractions = vec![2.4, 1.6, 0.8, 1.9, 1.6];
+        let steps = vec![1, 2, 4, 8, 1];
+        let sum = 20;
+        assert_eq!(
+            round_to_sum(&fractions, &steps, sum),
+            vec![2.0, 2.0, 1.0, 1.0, 2.0]
+        );
     }
 }
