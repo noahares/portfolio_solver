@@ -6,18 +6,23 @@ use polars::{
 
 use anyhow::Result;
 
-use crate::datastructures::*;
+use crate::{csv_parser::best_per_instance, datastructures::*};
 
-fn read_quality_lb(path: String, instance_fields: &[&str]) -> DataFrame {
-    CsvReader::from_path(&path)
-       .unwrap_or_else(|_| {
-           panic!("No csv file found under {}, generate it with the dedicated binary", path)
-       })
-       .with_comment_char(Some(b'#'))
-       .has_header(true)
-       .with_columns(Some([instance_fields.iter().map(|s| s.to_string()).collect_vec(), vec!["quality_lb".to_string()]].concat()))
-       .finish()
-       .expect("Failed to read lower bound csv file")
+fn read_quality_lb(
+    path: String,
+    instance_fields: &[&str],
+) -> Result<DataFrame> {
+    Ok(CsvReader::from_path(&path)?
+        .with_comment_char(Some(b'#'))
+        .has_header(true)
+        .with_columns(Some(
+            [
+                instance_fields.iter().map(|s| s.to_string()).collect_vec(),
+                vec!["quality_lb".to_string()],
+            ]
+            .concat(),
+        ))
+        .finish()?)
 }
 
 pub fn fix_instance_names(instance: &str) -> String {
@@ -138,7 +143,12 @@ pub fn stats(
     algorithm_fields: &[&str],
     quality_lb_path: String,
 ) -> Result<LazyFrame> {
-    let quality_lb = read_quality_lb(quality_lb_path, instance_fields);
+    let quality_lb = read_quality_lb(quality_lb_path, instance_fields)
+        .unwrap_or_else(|_| {
+            best_per_instance(df.clone(), instance_fields, "quality")
+                .collect()
+                .unwrap()
+        });
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=sample_size)
     }

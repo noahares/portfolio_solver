@@ -75,8 +75,8 @@ impl Data {
             .filter(
                 col("feasibility_score").lt_eq(col("feasibility_threshold")),
             )
-            .filter(col("failed").str().contains("no"))
-            .filter(col("timeout").str().contains("no"))
+            .filter(col("failed").eq(lit("no")))
+            .filter(col("timeout").eq(lit("no")))
             .collect()
             .expect("Failed to collect valid instances dataframe");
 
