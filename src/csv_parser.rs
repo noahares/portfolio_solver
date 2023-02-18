@@ -263,7 +263,7 @@ pub fn best_per_instance(
 }
 
 pub fn df_to_csv_for_performance_profiles(
-    df: &DataFrame,
+    df: LazyFrame,
     portfolio: &SolverResult,
     df_config: &DataframeConfig,
     path: &str,
@@ -271,8 +271,6 @@ pub fn df_to_csv_for_performance_profiles(
     let mut out =
         std::fs::File::create(path).expect("Failed to create output file");
     let mut out_df = df
-        .clone()
-        .lazy()
         .rename(&df_config.out_fields, &df_config.in_fields)
         .collect()
         .expect("Missmatching fields for output dataframe");

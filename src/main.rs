@@ -16,20 +16,22 @@ fn main() -> Result<()> {
     let k = config.num_cores;
     let num_seeds = config.num_seeds;
     let out_file = config.out_file.clone();
+    let num_cores = config.num_cores;
     let data = csv_parser::Data::new(config);
     let df_config = DataframeConfig::new();
     println!("{data}");
     let portfolio = solver::solve(&data, k as usize);
     println!("{portfolio}");
-    let portfolio_runs = portfolio_simulator::simulate_portfolio_execution(
+    let portfolio_simulation = portfolio_simulator::simulation_df(
         &data,
         &portfolio,
         num_seeds,
         &df_config.instance_fields,
         &df_config.algorithm_fields,
+        num_cores,
     );
     csv_parser::df_to_csv_for_performance_profiles(
-        &portfolio_runs,
+        portfolio_simulation,
         &portfolio,
         &df_config,
         &out_file,

@@ -1,18 +1,45 @@
 use crate::{csv_parser::Data, datastructures::*};
 use itertools::Itertools;
 use polars::prelude::*;
+use rand::prelude::*;
 
-pub fn simulate_portfolio_execution(
+pub fn simulation_df(
     data: &Data,
     portfolio: &SolverResult,
     num_seeds: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
-) -> DataFrame {
-    let num_cores = portfolio
-        .resource_assignments
-        .iter()
-        .fold(0, |acc, a| acc + (a.1) as u32 * a.0.num_threads);
+    num_cores: u32,
+) -> LazyFrame {
+    let portfolio_runs = simulate_portfolio_execution(
+        data,
+        portfolio,
+        num_seeds,
+        instance_fields,
+        algorithm_fields,
+        "portfolio",
+        num_cores,
+    );
+    let algorithm_portfolios = simulate_algorithms_as_portfolio(
+        data,
+        num_seeds,
+        instance_fields,
+        algorithm_fields,
+        num_cores,
+    );
+    concat(&[portfolio_runs, algorithm_portfolios], false, false)
+        .expect("Failed to combine simulation dataframe")
+}
+
+fn simulate_portfolio_execution(
+    data: &Data,
+    portfolio: &SolverResult,
+    num_seeds: u32,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+    portfolio_name: &str,
+    num_cores: u32,
+) -> LazyFrame {
     let runs = (0..num_seeds)
         .map(|seed| {
             let simulation_df = simulate(data, portfolio, seed as u64);
@@ -21,13 +48,41 @@ pub fn simulate_portfolio_execution(
                 instance_fields,
                 algorithm_fields,
                 num_cores,
+                portfolio_name,
             )
         })
         .collect_vec();
     concat(runs, false, false)
         .expect("Failed to combine portfolio simulations")
-        .collect()
-        .unwrap()
+}
+
+fn simulate_algorithms_as_portfolio(
+    data: &Data,
+    num_seeds: u32,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+    num_cores: u32,
+) -> LazyFrame {
+    let algorithm_portfolios = data
+        .algorithms
+        .iter()
+        .map(|algo| SolverResult {
+            resource_assignments: vec![(algo.clone(), num_cores as f64)],
+        })
+        .map(|portfolio| {
+            simulate_portfolio_execution(
+                data,
+                &portfolio,
+                num_seeds,
+                instance_fields,
+                algorithm_fields,
+                &portfolio.resource_assignments[0].0.algorithm,
+                num_cores,
+            )
+        })
+        .collect_vec();
+    concat(algorithm_portfolios, false, false)
+        .expect("Failed to combine algorithm portfolio simulations")
 }
 
 fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
@@ -42,6 +97,14 @@ fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
         .resource_assignments
         .iter()
         .map(|(algo, cores)| {
+            let num_samples = {
+                let num_samples = cores / algo.num_threads as f64;
+                if random() {
+                    num_samples.floor()
+                } else {
+                    num_samples.ceil()
+                }
+            } as usize;
             data.df
                 .clone()
                 .lazy()
@@ -54,12 +117,7 @@ fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
                         .map(|f| col(f))
                         .collect_vec(),
                 )
-                .agg([col("*").sample_n(
-                    cores.floor() as usize,
-                    false,
-                    true,
-                    Some(seed),
-                )])
+                .agg([col("*").sample_n(num_samples, true, true, Some(seed))])
                 .explode(explode_list.clone())
                 .with_column(lit(seed).alias("seed"))
         })
@@ -73,6 +131,7 @@ fn portfolio_run_from_samples(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
+    algorithm: &str,
 ) -> LazyFrame {
     df
         // .filter(col("feasibility_score").lt_eq(lit(0.03)))
@@ -80,7 +139,7 @@ fn portfolio_run_from_samples(
         // .filter(col("timeout").eq(lit("no")))
         .groupby(instance_fields)
         .agg([
-            lit("portfolio-solver").alias("algorithm"),
+            lit(algorithm).alias("algorithm"),
             lit(num_cores).alias("num_threads"),
             col("*")
                 .exclude(
@@ -147,6 +206,7 @@ mod tests {
             &["instance", "k", "feasibility_threshold"],
             &["algorithm", "num_threads"],
             2,
+            "portfolio",
         )
         .collect()
         .unwrap();
