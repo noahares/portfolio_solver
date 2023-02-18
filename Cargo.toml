@@ -11,6 +11,10 @@ rust-version = "1.66"
 name = "quality_lb"
 path = "src/bin/quality_lower_bound.rs"
 
+[[bin]]
+name = "portfolio_executor"
+path = "src/bin/portfolio_executor.rs"
+
 [dependencies]
 
 grb = "1.3.0"

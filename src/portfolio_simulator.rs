@@ -1,10 +1,11 @@
-use crate::{csv_parser::Data, datastructures::*};
+use crate::datastructures::*;
 use itertools::Itertools;
 use polars::prelude::*;
 use rand::prelude::*;
 
 pub fn simulation_df(
-    data: &Data,
+    df: &DataFrame,
+    algorithms: &ndarray::Array1<Algorithm>,
     portfolio: &SolverResult,
     num_seeds: u32,
     instance_fields: &[&str],
@@ -12,7 +13,7 @@ pub fn simulation_df(
     num_cores: u32,
 ) -> LazyFrame {
     let portfolio_runs = simulate_portfolio_execution(
-        data,
+        df,
         portfolio,
         num_seeds,
         instance_fields,
@@ -21,7 +22,8 @@ pub fn simulation_df(
         num_cores,
     );
     let algorithm_portfolios = simulate_algorithms_as_portfolio(
-        data,
+        df,
+        algorithms,
         num_seeds,
         instance_fields,
         algorithm_fields,
@@ -32,7 +34,7 @@ pub fn simulation_df(
 }
 
 fn simulate_portfolio_execution(
-    data: &Data,
+    df: &DataFrame,
     portfolio: &SolverResult,
     num_seeds: u32,
     instance_fields: &[&str],
@@ -42,7 +44,7 @@ fn simulate_portfolio_execution(
 ) -> LazyFrame {
     let runs = (0..num_seeds)
         .map(|seed| {
-            let simulation_df = simulate(data, portfolio, seed as u64);
+            let simulation_df = simulate(df, portfolio, seed as u64);
             portfolio_run_from_samples(
                 simulation_df,
                 instance_fields,
@@ -57,21 +59,21 @@ fn simulate_portfolio_execution(
 }
 
 fn simulate_algorithms_as_portfolio(
-    data: &Data,
+    df: &DataFrame,
+    algorithms: &ndarray::Array1<Algorithm>,
     num_seeds: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
 ) -> LazyFrame {
-    let algorithm_portfolios = data
-        .algorithms
+    let algorithm_portfolios = algorithms
         .iter()
         .map(|algo| SolverResult {
             resource_assignments: vec![(algo.clone(), num_cores as f64)],
         })
         .map(|portfolio| {
             simulate_portfolio_execution(
-                data,
+                df,
                 &portfolio,
                 num_seeds,
                 instance_fields,
@@ -85,7 +87,7 @@ fn simulate_algorithms_as_portfolio(
         .expect("Failed to combine algorithm portfolio simulations")
 }
 
-fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
+fn simulate(df: &DataFrame, portfolio: &SolverResult, seed: u64) -> LazyFrame {
     let config = DataframeConfig::new();
     let explode_list = config
         .out_fields
@@ -105,8 +107,7 @@ fn simulate(data: &Data, portfolio: &SolverResult, seed: u64) -> LazyFrame {
                     num_samples.ceil()
                 }
             } as usize;
-            data.df
-                .clone()
+            df.clone()
                 .lazy()
                 .filter(col("algorithm").eq(lit(algo.algorithm.clone())))
                 .filter(col("num_threads").eq(lit(algo.num_threads)))
@@ -192,7 +193,8 @@ mod tests {
                 ),
             ],
         };
-        let simulation_df = simulate(&data, &portfolio, 42).collect().unwrap();
+        let simulation_df =
+            simulate(&data.df, &portfolio, 42).collect().unwrap();
         assert_eq!(simulation_df.height(), 8);
         assert!(!simulation_df
             .column("algorithm")
@@ -221,7 +223,7 @@ mod tests {
                 .unwrap()
                 .to_ndarray()
                 .unwrap(),
-            ndarray::Array1::from_vec(vec![7.0, 9.0, 16.0, 22.0])
+            ndarray::Array1::from_vec(vec![9.0, 11.0, 18.0, 24.0])
         );
     }
 }

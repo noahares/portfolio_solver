@@ -20,7 +20,7 @@ impl Instance {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct Algorithm {
     pub algorithm: String,
     pub num_threads: u32,
@@ -71,7 +71,16 @@ pub struct QualityLowerBoundConfig {
     pub out: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Serialize, Deserialize)]
+pub struct PortfolioExecutorConfig {
+    pub files: Vec<String>,
+    pub portfolio: SolverResult,
+    pub num_seeds: u32,
+    pub num_cores: u32,
+    pub out: String,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct SolverResult {
     pub resource_assignments: Vec<(Algorithm, f64)>,
 }

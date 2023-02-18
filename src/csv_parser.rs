@@ -12,6 +12,8 @@ use anyhow::Result;
 
 use crate::datastructures::*;
 
+pub use utils::extract_algorithm_columns;
+
 mod utils;
 
 pub struct Data {

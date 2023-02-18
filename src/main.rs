@@ -14,6 +14,7 @@ fn main() -> Result<()> {
     let config: Config = serde_json::from_str(&config_str)
         .expect("Error while reading config file");
     let k = config.num_cores;
+    let files = config.files.clone();
     let num_seeds = config.num_seeds;
     let out_file = config.out_file.clone();
     let num_cores = config.num_cores;
@@ -23,7 +24,8 @@ fn main() -> Result<()> {
     let portfolio = solver::solve(&data, k as usize);
     println!("{portfolio}");
     let portfolio_simulation = portfolio_simulator::simulation_df(
-        &data,
+        &data.df,
+        &data.algorithms,
         &portfolio,
         num_seeds,
         &df_config.instance_fields,
@@ -36,5 +38,15 @@ fn main() -> Result<()> {
         &df_config,
         &out_file,
     );
+    serde_json::to_writer_pretty(
+        fs::File::create("config/executor.json")?,
+        &PortfolioExecutorConfig {
+            files,
+            portfolio,
+            num_seeds,
+            num_cores,
+            out: out_file,
+        },
+    )?;
     Ok(())
 }
