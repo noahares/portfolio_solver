@@ -13,5 +13,5 @@
   "num_cores": 32,
   "slowdown_ratio": 2.0,
   "num_seeds": 10,
-  "out_file": "results/example6.csv"
+  "out_dir": "results/example6"
 }

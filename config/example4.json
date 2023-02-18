@@ -7,5 +7,5 @@
   "num_cores": 8,
   "slowdown_ratio": 2.0,
   "num_seeds": 10,
-  "out_file": "results/example4.csv"
+  "out_dir": "results/example4"
 }

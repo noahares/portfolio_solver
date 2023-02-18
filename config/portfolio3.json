@@ -15,5 +15,6 @@
   "num_cores": 32,
   "slowdown_ratio": 2.0,
   "num_seeds": 10,
-  "out_file": "results/portfolio3.csv"
+  "out_dir": "results/portfolio3"
+
 }
