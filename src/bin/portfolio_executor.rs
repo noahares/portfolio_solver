@@ -31,7 +31,7 @@ fn main() -> Result<()> {
         num_cores,
     );
     csv_parser::df_to_csv_for_performance_profiles(
-        simulation, &portfolio, &df_config, &out,
+        simulation, &df_config, &out,
     );
     Ok(())
 }

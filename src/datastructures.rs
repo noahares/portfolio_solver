@@ -54,7 +54,7 @@ pub struct Config {
     pub num_cores: u32,
     pub slowdown_ratio: f64,
     pub num_seeds: u32,
-    pub out_file: String,
+    pub out_dir: String,
 }
 
 fn default_ks() -> Vec<i64> {
@@ -80,7 +80,7 @@ pub struct PortfolioExecutorConfig {
     pub out: String,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct SolverResult {
     pub resource_assignments: Vec<(Algorithm, f64)>,
 }

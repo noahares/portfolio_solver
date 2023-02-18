@@ -16,8 +16,9 @@ fn main() -> Result<()> {
     let k = config.num_cores;
     let files = config.files.clone();
     let num_seeds = config.num_seeds;
-    let out_file = config.out_file.clone();
+    let out_dir = config.out_dir.trim_end_matches('/').to_owned();
     let num_cores = config.num_cores;
+    fs::create_dir(&out_dir).ok();
     let data = csv_parser::Data::new(config);
     let df_config = DataframeConfig::new();
     println!("{data}");
@@ -34,19 +35,22 @@ fn main() -> Result<()> {
     );
     csv_parser::df_to_csv_for_performance_profiles(
         portfolio_simulation,
-        &portfolio,
         &df_config,
-        &out_file,
+        &(out_dir.to_owned() + "/simulation.csv"),
     );
     serde_json::to_writer_pretty(
-        fs::File::create("config/executor.json")?,
+        fs::File::create(out_dir.to_owned() + "/executor.json")?,
         &PortfolioExecutorConfig {
             files,
-            portfolio,
+            portfolio: portfolio.clone(),
             num_seeds,
             num_cores,
-            out: out_file,
+            out: out_dir.to_owned() + "/execution.csv",
         },
+    )?;
+    serde_json::to_writer_pretty(
+        fs::File::create(out_dir + "/portfolio.json")?,
+        &portfolio,
     )?;
     Ok(())
 }
