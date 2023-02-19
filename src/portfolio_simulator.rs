@@ -101,7 +101,7 @@ fn simulate(df: &DataFrame, portfolio: &SolverResult, seed: u64) -> LazyFrame {
         .map(|(algo, cores)| {
             let num_samples = {
                 let num_samples = cores / algo.num_threads as f64;
-                if random() {
+                if random::<f64>() >= num_samples - num_samples.floor() {
                     num_samples.floor()
                 } else {
                     num_samples.ceil()
@@ -174,7 +174,7 @@ mod tests {
             ],
             ..default_config()
         };
-        let data = Data::new(config);
+        let data = Data::new(&config);
         let portfolio = SolverResult {
             resource_assignments: vec![
                 (

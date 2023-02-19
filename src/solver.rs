@@ -268,7 +268,7 @@ mod tests {
             ..default_config()
         };
         let k = config.num_cores;
-        let data = Data::new(config);
+        let data = Data::new(&config);
         assert_eq!(
             solve(&data, k as usize),
             SolverResult {
@@ -303,7 +303,7 @@ mod tests {
             ..default_config()
         };
         let k = config.num_cores;
-        let data = Data::new(config);
+        let data = Data::new(&config);
         assert_eq!(
             solve(&data, k as usize),
             SolverResult {

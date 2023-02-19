@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let out_dir = config.out_dir.trim_end_matches('/').to_owned();
     let num_cores = config.num_cores;
     fs::create_dir(&out_dir).ok();
-    let data = csv_parser::Data::new(config);
+    let data = csv_parser::Data::new(&config);
     let df_config = DataframeConfig::new();
     println!("{data}");
     let portfolio = solver::solve(&data, k as usize);

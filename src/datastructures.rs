@@ -41,7 +41,7 @@ impl fmt::Display for Algorithm {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     pub files: Vec<String>,
     #[serde(default)]

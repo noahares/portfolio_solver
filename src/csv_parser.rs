@@ -33,7 +33,7 @@ impl fmt::Display for Data {
 }
 
 impl Data {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: &Config) -> Self {
         let Config {
             files: paths,
             quality_lb: quality_lb_path,
@@ -44,7 +44,7 @@ impl Data {
             slowdown_ratio,
             num_seeds: _,
             out_dir: _,
-        } = config;
+        } = config.clone();
         let df_config = DataframeConfig::new();
         let df = utils::filter_desired_instances(
             preprocess_df(paths.as_ref(), &df_config),

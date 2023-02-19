@@ -16,7 +16,7 @@ fn test_dataframe() {
         ],
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
@@ -35,7 +35,7 @@ fn test_handle_quality_is_zero() {
         ],
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance, arr1(&[1.0, 7.0, 22.0, 1.0]));
@@ -47,7 +47,7 @@ fn test_handle_invalid_rows() {
         files: vec!["data/test/algo4.csv".to_string()],
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 1);
     assert_eq!(data.best_per_instance, arr1(&[20.0, 20.0, 20.0, 20.0]));
@@ -62,7 +62,7 @@ fn test_missing_algo_for_instance() {
         ],
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 22.0, 9.0]));
@@ -77,7 +77,7 @@ fn test_best_per_instance_time() {
         ],
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));
@@ -93,7 +93,7 @@ fn test_slowdown_ratio_filter() {
         slowdown_ratio: 2.0,
         ..default_config()
     };
-    let data = Data::new(config);
+    let data = Data::new(&config);
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance_time, arr1(&[1.2, 4.2, 2.0, 3.0]));

@@ -10,6 +10,6 @@ pub fn default_config() -> Config {
         num_cores: 2,
         slowdown_ratio: std::f64::MAX,
         num_seeds: 1,
-        out_file: "".to_string(),
+        out_dir: "".to_string(),
     }
 }
