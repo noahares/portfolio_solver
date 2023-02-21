@@ -2,7 +2,7 @@
   "files": [
     "data/parallel_m_g/kaminpar_64.csv",
     "data/parallel_m_g/mt_kahip_64.csv",
-    "data/parallel_m_g/mt_kahypar_d_64.csv"
+    "data/parallel_m_g/mt_kahypar_d_graph_64.csv"
   ],
   "ks": [2, 4, 8, 16, 32, 64, 128],
   "feasibility_thresholds": [0.03],

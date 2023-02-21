@@ -2,11 +2,11 @@
   "files": [
     "data/sequential_m_g/kaffpa_fasts.csv",
     "data/sequential_m_g/metis_k.csv",
-    "data/parallel_m_g/mt_kahypar_d_1.csv",
-    "data/parallel_m_g/mt_kahypar_d_2.csv",
-    "data/parallel_m_g/mt_kahypar_d_4.csv",
-    "data/parallel_m_g/mt_kahypar_d_8.csv",
-    "data/parallel_m_g/mt_kahypar_d_16.csv"
+    "data/parallel_m_g/mt_kahypar_d_graph_1.csv",
+    "data/parallel_m_g/mt_kahypar_d_graph_2.csv",
+    "data/parallel_m_g/mt_kahypar_d_graph_4.csv",
+    "data/parallel_m_g/mt_kahypar_d_graph_8.csv",
+    "data/parallel_m_g/mt_kahypar_d_graph_16.csv"
   ],
   "ks": [2, 4, 8, 16, 32, 64, 128],
   "feasibility_thresholds": [0.03],
