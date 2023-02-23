@@ -1,4 +1,5 @@
 use core::fmt;
+use itertools::Itertools;
 use polars::{
     lazy::dsl::{Expr, GetOutput},
     prelude::*,
@@ -46,6 +47,16 @@ impl Data {
             out_dir: _,
         } = config.clone();
         let df_config = DataframeConfig::new();
+        let sort_exprs = df_config
+            .sort_order
+            .iter()
+            .map(|o| col(o))
+            .collect::<Vec<Expr>>();
+        let sort_options = vec![
+            false;
+            df_config.instance_fields.len()
+                + df_config.algorithm_fields.len()
+        ];
         let df = utils::filter_desired_instances(
             preprocess_df(paths.as_ref(), &df_config),
             &graphs_path,
@@ -53,19 +64,7 @@ impl Data {
             &feasibility_thresholds,
             &df_config.instance_fields,
         )
-        .sort_by_exprs(
-            df_config
-                .sort_order
-                .iter()
-                .map(|o| col(o))
-                .collect::<Vec<Expr>>(),
-            vec![
-                false;
-                df_config.instance_fields.len()
-                    + df_config.algorithm_fields.len()
-            ],
-            false,
-        )
+        .sort_by_exprs(&sort_exprs, &sort_options, false)
         .collect()
         .expect("Failed to collect preprocessed dataframe");
 
@@ -77,13 +76,16 @@ impl Data {
             )
             .filter(col("failed").eq(lit("no")))
             .filter(col("timeout").eq(lit("no")))
+            .sort_by_exprs(&sort_exprs, &sort_options, false)
             .collect()
             .expect("Failed to collect valid instances dataframe");
 
         let instances =
             utils::extract_instance_columns(&df, &df_config.instance_fields);
+        assert!(instances.iter().tuple_windows().all(|(a, b)| a <= b));
         let algorithms =
             utils::extract_algorithm_columns(&df, &df_config.algorithm_fields);
+        assert!(algorithms.iter().tuple_windows().all(|(a, b)| a <= b));
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
         let best_per_instance_df = best_per_instance(
@@ -93,6 +95,10 @@ impl Data {
         )
         .collect()
         .expect("Failed to collect best_per_instance dataframe");
+        assert_eq!(
+            best_per_instance_df.column("instance").unwrap().is_sorted(),
+            IsSorted::Ascending
+        );
         let best_per_instance =
             utils::column_to_f64_array(&best_per_instance_df, "best_quality");
         assert!(best_per_instance.iter().all(|val| val.abs() >= EPSILON));
@@ -100,12 +106,18 @@ impl Data {
             valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
             "quality",
+        )
+        .collect()
+        .expect("Failed to collect best_per_instance_time dataframe");
+        assert_eq!(
+            best_per_instance_time_df
+                .column("instance")
+                .unwrap()
+                .is_sorted(),
+            IsSorted::Ascending
         );
         let best_per_instance_time = utils::column_to_f64_array(
-            &best_per_instance_time_df
-                .clone()
-                .collect()
-                .expect("Failed to collect best_per_instance_time dataframe"),
+            &best_per_instance_time_df,
             "best_time",
         );
         let slowdown_penalty = std::f64::MAX / num_instances as f64;
@@ -113,15 +125,27 @@ impl Data {
             valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
             slowdown_ratio,
-            best_per_instance_time_df,
+            best_per_instance_time_df.lazy(),
             slowdown_penalty,
         )
+        .sort_by_exprs(&sort_exprs, &sort_options, false)
         .collect()
         .expect("Failed to collect slowdown_ratio dataframe");
 
+        dbg!(
+            slowdown_ratio_df.height(),
+            slowdown_ratio_df
+                .clone()
+                .lazy()
+                .filter(col("quality").eq(lit(slowdown_penalty)))
+                .collect()
+                .unwrap()
+                .height()
+        );
+
         let best_per_instance_count = utils::column_to_f64_array(
             &utils::best_per_instance_count(
-                valid_instance_df,
+                valid_instance_df.clone(),
                 &df_config.instance_fields,
                 &df_config.algorithm_fields,
                 "quality",
@@ -129,6 +153,14 @@ impl Data {
             "count",
         );
 
+        assert_eq!(
+            valid_instance_df.column("instance").unwrap().is_sorted(),
+            IsSorted::Ascending
+        );
+        assert_eq!(
+            slowdown_ratio_df.column("instance").unwrap().is_sorted(),
+            IsSorted::Ascending
+        );
         let stats_df = utils::stats(
             slowdown_ratio_df.lazy(),
             k,
@@ -139,6 +171,7 @@ impl Data {
         .expect(
             "Something went very wrong, stats dataframe could not be created",
         )
+        .sort_by_exprs(&sort_exprs, &sort_options, false)
         .collect()
         .expect("Failed to collect stats dataframe");
 
@@ -147,8 +180,16 @@ impl Data {
             k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,
-        );
+        )
+        .lazy()
+        .sort_by_exprs(&sort_exprs, &sort_options, false)
+        .collect()
+        .unwrap();
 
+        assert_eq!(
+            clean_df.column("instance").unwrap().is_sorted(),
+            IsSorted::Ascending
+        );
         let shape = (num_instances, num_algorithms, k as usize);
         assert_eq!(
             num_instances * num_algorithms * k as usize,

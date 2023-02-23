@@ -332,7 +332,7 @@ pub fn best_per_instance_count(
                 .collect_vec(),
         )
         .groupby_stable(algorithm_fields)
-        .agg([count().alias("count").cast(DataType::Float64)])
+        .agg([col("*"), count().alias("count").cast(DataType::Float64)])
         .collect()
         .expect("Error counting best per instance")
         .outer_join(&algorithm_series, algorithm_fields, algorithm_fields)

@@ -3,7 +3,7 @@ use polars::datatypes::*;
 use polars::prelude::Schema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct Instance {
     pub graph: String,
     pub k: u32,
@@ -20,7 +20,9 @@ impl Instance {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
+#[derive(
+    Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, PartialOrd,
+)]
 pub struct Algorithm {
     pub algorithm: String,
     pub num_threads: u32,

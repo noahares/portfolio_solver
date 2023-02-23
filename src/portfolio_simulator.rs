@@ -78,7 +78,7 @@ fn simulate_algorithms_as_portfolio(
                 num_seeds,
                 instance_fields,
                 algorithm_fields,
-                &portfolio.resource_assignments[0].0.algorithm,
+                &portfolio.resource_assignments[0].0.to_string(),
                 num_cores,
             )
         })
