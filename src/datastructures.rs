@@ -1,3 +1,4 @@
+use anyhow::Result;
 use core::fmt;
 use polars::datatypes::*;
 use polars::prelude::Schema;
@@ -43,6 +44,21 @@ impl fmt::Display for Algorithm {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Timeout(pub f64);
+impl Default for Timeout {
+    fn default() -> Self {
+        Timeout(900.0)
+    }
+}
+
+impl FromStr for Timeout {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(s.parse::<f64>()?))
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     pub files: Vec<String>,
@@ -57,6 +73,8 @@ pub struct Config {
     pub slowdown_ratio: f64,
     pub num_seeds: u32,
     pub out_dir: String,
+    #[serde(default)]
+    pub timeout: Timeout,
 }
 
 fn default_ks() -> Vec<i64> {
@@ -157,4 +175,20 @@ impl Default for DataframeConfig<'_> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+use clap::Parser;
+use std::{path::PathBuf, str::FromStr};
+
+#[derive(Parser)]
+#[command(author, version, about)]
+pub struct Args {
+    #[arg(short, long, value_name = "FILE")]
+    pub config: PathBuf,
+    #[arg(short, long)]
+    pub slowdown_ratio: Option<f64>,
+    #[arg(short, long, value_name = "DIR")]
+    pub out_dir: Option<PathBuf>,
+    #[arg(short, long, value_parser)]
+    pub timeout: Option<Timeout>,
 }

@@ -45,6 +45,7 @@ impl Data {
             slowdown_ratio,
             num_seeds: _,
             out_dir: _,
+            timeout: _,
         } = config.clone();
         let df_config = DataframeConfig::new();
         let sort_exprs = df_config

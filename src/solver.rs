@@ -7,12 +7,12 @@ use crate::csv_parser::Data;
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
-pub fn solve(data: &Data, num_cores: usize) -> SolverResult {
+pub fn solve(data: &Data, num_cores: usize, timeout: Timeout) -> SolverResult {
     let mut model =
         Model::new("portfolio_model").expect("Failed to create Gurobi Model");
     model.set_param(param::NumericFocus, 1).unwrap();
     // model.set_param(param::SolFiles, "portfolio_model".to_string())?;
-    model.set_param(param::TimeLimit, 900.0).unwrap();
+    model.set_param(param::TimeLimit, timeout.0).unwrap();
     let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a =
@@ -270,7 +270,7 @@ mod tests {
         let k = config.num_cores;
         let data = Data::new(&config);
         assert_eq!(
-            solve(&data, k as usize),
+            solve(&data, k as usize, Timeout::default()),
             SolverResult {
                 resource_assignments: vec![
                     (
@@ -305,7 +305,7 @@ mod tests {
         let k = config.num_cores;
         let data = Data::new(&config);
         assert_eq!(
-            solve(&data, k as usize),
+            solve(&data, k as usize, Timeout::default()),
             SolverResult {
                 resource_assignments: vec![
                     (

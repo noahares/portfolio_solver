@@ -1,4 +1,4 @@
-use crate::datastructures::Config;
+use crate::datastructures::{Config, Timeout};
 
 pub fn default_config() -> Config {
     Config {
@@ -11,5 +11,6 @@ pub fn default_config() -> Config {
         slowdown_ratio: std::f64::MAX,
         num_seeds: 1,
         out_dir: "".to_string(),
+        timeout: Timeout::default(),
     }
 }
