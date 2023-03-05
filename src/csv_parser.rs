@@ -161,17 +161,12 @@ impl Data {
             slowdown_ratio_df.column("instance").unwrap().is_sorted(),
             IsSorted::Ascending
         );
-        let stats_df = utils::stats(
+        let stats_df = utils::stats_by_sampling(
             slowdown_ratio_df.lazy(),
             k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,
-            quality_lb_path,
         )
-        .expect(
-            "Something went very wrong, stats dataframe could not be created",
-        )
-        .sort_by_exprs(&sort_exprs, &sort_options, false)
         .collect()
         .expect("Failed to collect stats dataframe");
 

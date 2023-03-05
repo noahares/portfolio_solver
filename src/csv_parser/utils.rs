@@ -252,6 +252,39 @@ fn expected_maximum_approximation(sample_size: u32) -> f64 {
     f64::sqrt(2.0 * f64::ln(sample_size as f64))
 }
 
+pub fn stats_by_sampling(
+    df: LazyFrame,
+    sample_size: u32,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+) -> LazyFrame {
+    let columns = [instance_fields, algorithm_fields]
+        .concat()
+        .iter()
+        .map(|f| col(f))
+        .collect_vec();
+
+    let sort_order =
+        [DataframeConfig::new().sort_order, ["sample_size"].to_vec()].concat();
+    let sort_exprs = sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>();
+    let sort_options =
+        vec![false; instance_fields.len() + algorithm_fields.len() + 1];
+    let samples_per_repeats: Vec<LazyFrame> = (1_u64..=sample_size as u64)
+        .map(|s| {
+            df.clone()
+                .groupby(columns.clone())
+                .agg([col("quality")
+                    .sample_n(s as usize, true, true, Some(s))
+                    .min()
+                    .alias("e_min")])
+                .with_column(lit(s as u32).alias("sample_size"))
+        })
+        .collect();
+    concat(samples_per_repeats, false, false)
+        .expect("Failed to build E_min dataframe")
+        .sort_by_exprs(&sort_exprs, sort_options, false)
+}
+
 pub fn cleanup_missing_rows(
     df: DataFrame,
     k: u32,
