@@ -121,7 +121,7 @@ impl Data {
             &best_per_instance_time_df,
             "best_time",
         );
-        let slowdown_penalty = std::f64::MAX / num_instances as f64;
+        let slowdown_penalty = std::u32::MAX as f64;
         let slowdown_ratio_df = utils::filter_slowdown(
             valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
