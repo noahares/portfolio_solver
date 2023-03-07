@@ -37,7 +37,7 @@ impl Data {
     pub fn new(config: &Config) -> Self {
         let Config {
             files: paths,
-            quality_lb: quality_lb_path,
+            quality_lb: _,
             graphs: graphs_path,
             ks: num_parts,
             feasibility_thresholds,
@@ -81,11 +81,15 @@ impl Data {
             .collect()
             .expect("Failed to collect valid instances dataframe");
 
-        let instances =
-            utils::extract_instance_columns(&df, &df_config.instance_fields);
+        let instances = utils::extract_instance_columns(
+            &valid_instance_df,
+            &df_config.instance_fields,
+        );
         assert!(instances.iter().tuple_windows().all(|(a, b)| a <= b));
-        let algorithms =
-            utils::extract_algorithm_columns(&df, &df_config.algorithm_fields);
+        let algorithms = utils::extract_algorithm_columns(
+            &valid_instance_df,
+            &df_config.algorithm_fields,
+        );
         assert!(algorithms.iter().tuple_windows().all(|(a, b)| a <= b));
         let num_instances = instances.len();
         let num_algorithms = algorithms.len();
@@ -121,7 +125,7 @@ impl Data {
             &best_per_instance_time_df,
             "best_time",
         );
-        let slowdown_penalty = std::u32::MAX as f64;
+        let slowdown_penalty = (std::u32::MAX >> 16) as f64;
         let slowdown_ratio_df = utils::filter_slowdown(
             valid_instance_df.clone().lazy(),
             &df_config.instance_fields,
