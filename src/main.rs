@@ -18,6 +18,9 @@ fn main() -> Result<()> {
         if let Some(slowdown_ratio) = args.slowdown_ratio {
             config.slowdown_ratio = slowdown_ratio;
         }
+        if config.slowdown_ratio == 0.0 {
+            config.slowdown_ratio = std::u32::MAX as f64;
+        }
         if let Some(out_dir) = args.out_dir.as_deref() {
             config.out_dir = out_dir
                 .to_str()

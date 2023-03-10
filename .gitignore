@@ -2,3 +2,5 @@ target/
 playground/
 gurobi.log
 portfolio_model.lp
+results/
+__pycache__/
