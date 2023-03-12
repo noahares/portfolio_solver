@@ -42,7 +42,8 @@ fn main() -> Result<()> {
     let data = csv_parser::Data::new(&config);
     let df_config = DataframeConfig::new();
     println!("{data}");
-    let portfolio = solver::solve(&data, k as usize, timeout);
+    let (initial_portfolio, portfolio) =
+        solver::solve(&data, k as usize, timeout);
     println!("{portfolio}");
     let portfolio_simulation = portfolio_simulator::simulation_df(
         &data.df,
@@ -69,8 +70,12 @@ fn main() -> Result<()> {
         },
     )?;
     serde_json::to_writer_pretty(
-        fs::File::create(out_dir + "/portfolio.json")?,
+        fs::File::create(out_dir.clone() + "/portfolio.json")?,
         &portfolio,
+    )?;
+    serde_json::to_writer_pretty(
+        fs::File::create(out_dir + "/initial_portfolio.json")?,
+        &initial_portfolio,
     )?;
     Ok(())
 }

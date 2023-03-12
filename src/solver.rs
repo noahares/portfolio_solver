@@ -7,7 +7,11 @@ use crate::csv_parser::Data;
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
-pub fn solve(data: &Data, num_cores: usize, timeout: Timeout) -> SolverResult {
+pub fn solve(
+    data: &Data,
+    num_cores: usize,
+    timeout: Timeout,
+) -> (SolverResult, SolverResult) {
     let mut model =
         Model::new("portfolio_model").expect("Failed to create Gurobi Model");
     model.set_param(param::NumericFocus, 1).unwrap();
@@ -117,6 +121,7 @@ pub fn solve(data: &Data, num_cores: usize, timeout: Timeout) -> SolverResult {
     //         .set_obj_attr(attr::Start, &a[(i, j, k)], 1.0)
     //         .expect("Failed to set initial solution");
     // }
+    let mut initial_solution = vec![0.0; n * num_cores];
     for (i, v) in get_b_start(
         &data.best_per_instance_count,
         &data.algorithms,
@@ -132,12 +137,16 @@ pub fn solve(data: &Data, num_cores: usize, timeout: Timeout) -> SolverResult {
         model
             .set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)
             .expect("Failed to set initial solution");
+        initial_solution[i * num_cores + *v as usize - 1] = 1.0;
     }
     // for (i, v) in data.best_per_instance.iter().enumerate() {
     //     model
     //         .set_obj_attr(attr::Start, &q[i], *v)
     //         .expect("Failed to set initial solution");
     // }
+    let initial_portfolio =
+        postprocess_solution(initial_solution, n, num_cores, &data.algorithms);
+    dbg!(&initial_portfolio);
     model
         .set_objective(objective_function, ModelSense::Minimize)
         .expect("Failed to set objective function");
@@ -153,7 +162,7 @@ pub fn solve(data: &Data, num_cores: usize, timeout: Timeout) -> SolverResult {
     let result =
         postprocess_solution(solution, n, num_cores, &data.algorithms);
     dbg!(model.get_attr(attr::ObjVal).unwrap(), m);
-    result
+    (initial_portfolio, result)
 }
 
 fn postprocess_solution(

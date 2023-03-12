@@ -13,7 +13,7 @@ fn test_simple_model() {
     let k = config.num_cores;
     let data = Data::new(&config);
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()),
+        solve(&data, k as usize, Timeout::default()).1,
         SolverResult {
             resource_assignments: vec![
                 (
@@ -48,7 +48,7 @@ fn test_seq_vs_par() {
     let k = config.num_cores;
     let data = Data::new(&config);
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()),
+        solve(&data, k as usize, Timeout::default()).1,
         SolverResult {
             resource_assignments: vec![
                 (
