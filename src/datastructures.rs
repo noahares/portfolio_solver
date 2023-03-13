@@ -183,12 +183,14 @@ use std::{path::PathBuf, str::FromStr};
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct Args {
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long)]
     pub config: PathBuf,
     #[arg(short, long)]
     pub slowdown_ratio: Option<f64>,
-    #[arg(short, long, value_name = "DIR")]
+    #[arg(short, long)]
     pub out_dir: Option<PathBuf>,
     #[arg(short, long, value_parser)]
     pub timeout: Option<Timeout>,
+    #[arg(short = 'k', long)]
+    pub num_cores: Option<u32>,
 }

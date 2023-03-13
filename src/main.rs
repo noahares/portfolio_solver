@@ -30,6 +30,9 @@ fn main() -> Result<()> {
         if let Some(timeout) = args.timeout {
             config.timeout = timeout;
         }
+        if let Some(num_cores) = args.num_cores {
+            config.num_cores = num_cores;
+        }
         config
     };
     let k = config.num_cores;
