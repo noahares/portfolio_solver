@@ -1,7 +1,10 @@
 use ndarray::{arr1, aview2, Axis};
 use polars::prelude::*;
 
-use crate::{csv_parser::Data, datastructures::Config};
+use crate::{
+    csv_parser::{utils::filter_algorithms_by_slowdown, Data},
+    datastructures::Config,
+};
 
 use super::utils::{best_per_instance_count, stats_by_sampling};
 
@@ -145,5 +148,29 @@ fn test_stats_by_sampling() {
             "e_min",
             vec![9.0, 7.0, 7.0, 7.0, 22.0, 19.0, 18.0, 18.0]
         )
+    );
+}
+
+#[test]
+fn test_algorithm_slowdown_filtering() {
+    let instance_fields = &["instance"];
+    let algorithm_fields = &["algorithm"];
+    let df = df! {
+            "instance" => ["graph1", "graph1", "graph1", "graph2", "graph2", "graph2"],
+            "algorithm" => ["algo1", "algo2", "algo3", "algo1", "algo2", "algo3"],
+            "quality" => [1.0, 2.0, 2.0, 2.0, 1.0, 2.0],
+            "time" => [2.0, 2.0, 1.0, 2.0, 2.0, 1.0],
+        }.unwrap();
+    let filtered_df = filter_algorithms_by_slowdown(
+        df.lazy(),
+        instance_fields,
+        algorithm_fields,
+        0.5,
+    )
+    .collect()
+    .unwrap();
+    assert_eq!(
+        filtered_df["algorithm"],
+        Series::new("algorithm", &["algo3".to_string(), "algo3".into()])
     );
 }

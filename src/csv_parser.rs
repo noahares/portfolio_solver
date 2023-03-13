@@ -69,17 +69,28 @@ impl Data {
         .collect()
         .expect("Failed to collect preprocessed dataframe");
 
-        let valid_instance_df = df
-            .clone()
-            .lazy()
-            .filter(
-                col("feasibility_score").lt_eq(col("feasibility_threshold")),
-            )
-            .filter(col("failed").eq(lit("no")))
-            .filter(col("timeout").eq(lit("no")))
-            .sort_by_exprs(&sort_exprs, &sort_options, false)
-            .collect()
-            .expect("Failed to collect valid instances dataframe");
+        let valid_instance_df = utils::filter_algorithms_by_slowdown(
+            df.clone()
+                .lazy()
+                .filter(
+                    col("feasibility_score")
+                        .lt_eq(col("feasibility_threshold")),
+                )
+                .filter(col("failed").eq(lit("no")))
+                .filter(col("timeout").eq(lit("no")))
+                .filter(col("num_threads").lt_eq(lit(k))),
+            &df_config.instance_fields,
+            &df_config.algorithm_fields,
+            slowdown_ratio,
+        )
+        .sort_by_exprs(&sort_exprs, &sort_options, false)
+        .collect()
+        .expect("Failed to collect valid instances dataframe");
+
+        if valid_instance_df.height() == 0 {
+            eprintln!("Error: A portfolio with gmean faster than {slowdown_ratio} * gmean(best) is not possible, try a smaller slowdown ratio.");
+            std::process::exit(exitcode::DATAERR);
+        }
 
         let instances = utils::extract_instance_columns(
             &valid_instance_df,
@@ -125,28 +136,6 @@ impl Data {
             &best_per_instance_time_df,
             "best_time",
         );
-        let slowdown_penalty = (std::u32::MAX >> 16) as f64;
-        let slowdown_ratio_df = utils::filter_slowdown(
-            valid_instance_df.clone().lazy(),
-            &df_config.instance_fields,
-            slowdown_ratio,
-            best_per_instance_time_df.lazy(),
-            slowdown_penalty,
-        )
-        .sort_by_exprs(&sort_exprs, &sort_options, false)
-        .collect()
-        .expect("Failed to collect slowdown_ratio dataframe");
-
-        dbg!(
-            slowdown_ratio_df.height(),
-            slowdown_ratio_df
-                .clone()
-                .lazy()
-                .filter(col("quality").eq(lit(slowdown_penalty)))
-                .collect()
-                .unwrap()
-                .height()
-        );
 
         let best_per_instance_count = utils::column_to_f64_array(
             &utils::best_per_instance_count(
@@ -162,12 +151,8 @@ impl Data {
             valid_instance_df.column("instance").unwrap().is_sorted(),
             IsSorted::Ascending
         );
-        assert_eq!(
-            slowdown_ratio_df.column("instance").unwrap().is_sorted(),
-            IsSorted::Ascending
-        );
         let stats_df = utils::stats_by_sampling(
-            slowdown_ratio_df.lazy(),
+            valid_instance_df.lazy(),
             k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,

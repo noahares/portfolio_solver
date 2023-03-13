@@ -27,3 +27,4 @@ ndarray = "0.15.6"
 polars = { version = "0.26.1", features = ["lazy", "cross_join", "dtype-struct", "ndarray", "strings", "random"] }
 rand = "0.8.5"
 clap = { version = "4.1.8", features = ["derive"] }
+exitcode = "1.1.2"

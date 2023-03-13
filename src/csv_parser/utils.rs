@@ -342,6 +342,54 @@ pub fn filter_slowdown(
     // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
 }
 
+pub fn filter_algorithms_by_slowdown(
+    df: LazyFrame,
+    instance_fields: &[&str],
+    algorithm_fields: &[&str],
+    slowdown_ratio: f64,
+) -> LazyFrame {
+    let gmean = |s: Series| -> Result<Series, PolarsError> {
+        let gmean = s.f64()?.into_no_null_iter().map(|v| v.ln()).sum::<f64>()
+            / s.len() as f64;
+        Ok(Series::new("gmean", &[gmean]))
+    };
+    let best_per_instance_time_df =
+        best_per_instance_time(df.clone(), instance_fields, "quality");
+    let gmean_best_per_instance = best_per_instance_time_df
+        .select([col("best_time")
+            .apply(gmean, GetOutput::from_type(DataType::Float64))
+            .alias("gmean")])
+        .collect()
+        .expect("Failed to get gmean value")["gmean"]
+        .f64()
+        .unwrap()
+        .into_no_null_iter()
+        .last()
+        .unwrap();
+    let filtered_df = df
+        .clone()
+        .groupby(algorithm_fields)
+        .agg([col("time")
+            .apply(gmean, GetOutput::from_type(DataType::Float64))
+            .first()
+            .alias("gmean")])
+        .filter(
+            col("gmean").lt(lit(slowdown_ratio * gmean_best_per_instance)),
+        );
+    df.join(
+        filtered_df,
+        algorithm_fields
+            .iter()
+            .map(|field| col(field))
+            .collect_vec(),
+        algorithm_fields
+            .iter()
+            .map(|field| col(field))
+            .collect_vec(),
+        JoinType::Inner,
+    )
+}
+
 pub fn best_per_instance_count(
     df: DataFrame,
     instance_fields: &[&str],
