@@ -1,3 +1,4 @@
+from matplotlib.ticker import AutoMinorLocator
 import pandas as pd
 from collections import *
 import seaborn as sb
@@ -181,6 +182,8 @@ def plot(plotname, df, colors, display_legend="Yes", title=None,
             axes[1].set_xticklabels(x1)
         else:
             axes[0].set_xticks([1, 1.05, 1.1])
+            axes[0].xaxis.set_minor_locator(AutoMinorLocator(4))
+            axes[0].tick_params(which='minor', length=4)
             ax1_xticks = [1.5, 2.0]
             if nbuckets == 3 and 2 in axes[2].get_xticks():
                 ax1_xticks.remove(2.0)
@@ -221,9 +224,6 @@ def plot(plotname, df, colors, display_legend="Yes", title=None,
 
     if title != None:
         axes[nbuckets-1].text(0.5, 0.2, title, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='white'))
-
-    gmean_string = "\n".join(["Gmean performance ratios"] + [algo + ": " + str(round(scipy.stats.gmean(df[df.algorithm == algo].ratio), 5)) for algo in algos])
-    fig.text(1.1, 0.1, gmean_string, transform = ax.transAxes)
 
     #fig.tight_layout()
     fig.savefig(plotname + "_performance_profile.pdf", bbox_inches="tight", pad_inches=0.0)
