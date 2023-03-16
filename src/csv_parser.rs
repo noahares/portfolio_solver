@@ -37,7 +37,6 @@ impl Data {
     pub fn new(config: &Config) -> Self {
         let Config {
             files: paths,
-            quality_lb: _,
             graphs: graphs_path,
             ks: num_parts,
             feasibility_thresholds,

@@ -1,29 +1,9 @@
 use itertools::{izip, Itertools};
-use polars::{
-    lazy::dsl::{as_struct, GetOutput},
-    prelude::*,
-};
+use polars::prelude::*;
 
 use anyhow::Result;
 
-use crate::{csv_parser::best_per_instance, datastructures::*};
-
-fn read_quality_lb(
-    path: String,
-    instance_fields: &[&str],
-) -> Result<DataFrame> {
-    Ok(CsvReader::from_path(&path)?
-        .with_comment_char(Some(b'#'))
-        .has_header(true)
-        .with_columns(Some(
-            [
-                instance_fields.iter().map(|s| s.to_string()).collect_vec(),
-                vec!["quality_lb".to_string()],
-            ]
-            .concat(),
-        ))
-        .finish()?)
-}
+use crate::datastructures::*;
 
 pub fn fix_instance_names(instance: &str) -> String {
     if instance.ends_with("scotch") {
@@ -136,122 +116,6 @@ pub fn column_to_f64_array(
         .to_owned()
 }
 
-pub fn stats(
-    df: LazyFrame,
-    sample_size: u32,
-    instance_fields: &[&str],
-    algorithm_fields: &[&str],
-    quality_lb_path: String,
-) -> Result<LazyFrame> {
-    let quality_lb = read_quality_lb(quality_lb_path, instance_fields)
-        .unwrap_or_else(|_| {
-            best_per_instance(df.clone(), instance_fields, "quality")
-                .collect()
-                .unwrap()
-        });
-    let possible_repeats = df! {
-        "sample_size" => Vec::from_iter(1..=sample_size)
-    }
-    .unwrap();
-
-    let columns = [instance_fields, algorithm_fields, &["sample_size"]]
-        .concat()
-        .iter()
-        .map(|f| col(f))
-        .collect_vec();
-    Ok(df
-        .groupby_stable([algorithm_fields, instance_fields].concat())
-        .agg([
-            col("quality")
-                // NOTE: this filter does probably nothing atm
-                .filter(col("quality").lt(lit(std::f64::MAX)))
-                .mean()
-                .fill_null(lit(std::f64::MAX))
-                .prefix("mean_"),
-            col("quality")
-                // NOTE: this filter does probably nothing atm
-                .filter(col("quality").lt(lit(std::f64::MAX)))
-                .std(1)
-                .fill_null(lit(std::f64::MAX))
-                .prefix("std_"),
-        ])
-        .join(
-            quality_lb.lazy(),
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            JoinType::Inner,
-        )
-        .cross_join(possible_repeats.lazy())
-        .select(
-            [
-                columns,
-                [as_struct(&[
-                    col("mean_quality"),
-                    col("std_quality"),
-                    col("sample_size"),
-                    col("quality_lb"),
-                ])
-                .apply(
-                    |s| {
-                        let data = s.struct_()?;
-                        let (
-                            mean_series,
-                            std_series,
-                            sample_series,
-                            min_series,
-                        ) = (
-                            &data.fields()[0].f64()?,
-                            &data.fields()[1].f64()?,
-                            &data.fields()[2].u32()?,
-                            &data.fields()[3].f64()?,
-                        );
-                        let result: Float64Chunked = izip!(
-                            mean_series.into_iter(),
-                            std_series.into_iter(),
-                            sample_series.into_iter(),
-                            min_series.into_iter()
-                        )
-                        .map(|(opt_mean, opt_std, opt_s, opt_min)| {
-                            match (opt_mean, opt_std, opt_s, opt_min) {
-                                (
-                                    Some(mean),
-                                    Some(std),
-                                    Some(s),
-                                    Some(min),
-                                ) => Some(expected_normdist_min(
-                                    mean, std, s, min,
-                                )),
-                                _ => None,
-                            }
-                        })
-                        .collect();
-                        Ok(result.into_series())
-                    },
-                    GetOutput::from_type(DataType::Float64),
-                )
-                .alias("e_min")]
-                .to_vec(),
-            ]
-            .concat(),
-        ))
-}
-
-fn expected_normdist_min(
-    mean: f64,
-    std: f64,
-    sample_size: u32,
-    min: f64,
-) -> f64 {
-    let result =
-        (mean - std * expected_maximum_approximation(sample_size)).max(min);
-    assert!(result >= 0.0, "mean: {mean}, std: {std}, e_min: {result}");
-    result
-}
-
-fn expected_maximum_approximation(sample_size: u32) -> f64 {
-    f64::sqrt(2.0 * f64::ln(sample_size as f64))
-}
-
 pub fn stats_by_sampling(
     df: LazyFrame,
     sample_size: u32,
@@ -318,28 +182,6 @@ pub fn cleanup_missing_rows(
         .expect("Failed to fill missing rows")
         .fill_null(FillNullStrategy::MaxBound)
         .expect("Failed to fix null values")
-}
-
-pub fn filter_slowdown(
-    df: LazyFrame,
-    instance_fields: &[&str],
-    slowdown_ratio: f64,
-    best_per_instance_time_df: LazyFrame,
-    slowdown_penalty: f64,
-) -> LazyFrame {
-    df.join(
-        best_per_instance_time_df,
-        instance_fields.iter().map(|field| col(field)).collect_vec(),
-        instance_fields.iter().map(|field| col(field)).collect_vec(),
-        JoinType::Inner,
-    )
-    .with_column(
-        when(col("time").lt(col("best_time") * lit(slowdown_ratio)))
-            .then(col("quality"))
-            .otherwise(slowdown_penalty)
-            .alias("quality"),
-    )
-    // .filter(col("time").lt(col("best_time") * lit(slowdown_ratio)))
 }
 
 pub fn filter_algorithms_by_slowdown(

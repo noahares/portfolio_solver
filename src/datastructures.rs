@@ -68,7 +68,6 @@ pub struct Config {
     pub ks: Vec<i64>,
     #[serde(default = "default_feasibility_thresholds")]
     pub feasibility_thresholds: Vec<f64>,
-    pub quality_lb: String,
     pub num_cores: u32,
     pub slowdown_ratio: f64,
     pub num_seeds: u32,

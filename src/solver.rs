@@ -116,11 +116,6 @@ pub fn solve(
         Ok(())
     };
 
-    // for (i, j, k) in get_a_start(&data.stats, num_cores) {
-    //     model
-    //         .set_obj_attr(attr::Start, &a[(i, j, k)], 1.0)
-    //         .expect("Failed to set initial solution");
-    // }
     let mut initial_solution = vec![0.0; n * num_cores];
     for (i, v) in get_b_start(
         &data.best_per_instance_count,
@@ -139,11 +134,7 @@ pub fn solve(
             .expect("Failed to set initial solution");
         initial_solution[i * num_cores + *v as usize - 1] = 1.0;
     }
-    // for (i, v) in data.best_per_instance.iter().enumerate() {
-    //     model
-    //         .set_obj_attr(attr::Start, &q[i], *v)
-    //         .expect("Failed to set initial solution");
-    // }
+
     let initial_portfolio =
         postprocess_solution(initial_solution, n, num_cores, &data.algorithms);
     dbg!(&initial_portfolio);
@@ -186,25 +177,6 @@ fn postprocess_solution(
     SolverResult {
         resource_assignments,
     }
-}
-
-fn get_a_start(
-    stats: &ndarray::Array3<f64>,
-    num_cores: usize,
-) -> Vec<(usize, usize, usize)> {
-    stats
-        .outer_iter()
-        .enumerate()
-        .map(|(i, instance)| {
-            let pos = instance
-                .iter()
-                .position_min_by(|x, y| x.partial_cmp(y).unwrap())
-                .unwrap();
-            let j = pos / num_cores;
-            let k = pos % num_cores;
-            (i, j, k)
-        })
-        .collect_vec()
 }
 
 fn get_b_start(

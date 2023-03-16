@@ -1,4 +1,4 @@
-use super::{get_a_start, round_to_sum, solve};
+use super::{round_to_sum, solve};
 use crate::{csv_parser::Data, datastructures::*, test_utils::*};
 
 #[test]
@@ -68,13 +68,6 @@ fn test_seq_vs_par() {
             ]
         }
     );
-}
-
-#[test]
-fn test_a_start_values() {
-    let stats =
-        ndarray::array![[[1.0, 2.0], [3.0, 4.0]], [[7.0, 6.0], [5.0, 8.0]]];
-    assert_eq!(get_a_start(&stats, 2), vec![(0, 0, 0), (1, 1, 0)]);
 }
 
 #[test]
