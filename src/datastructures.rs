@@ -1,7 +1,10 @@
 use anyhow::Result;
 use core::fmt;
+use itertools::Itertools;
 use polars::datatypes::*;
 use polars::prelude::Schema;
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
@@ -113,6 +116,36 @@ impl fmt::Display for SolverResult {
     }
 }
 
+impl SolverResult {
+    // TODO: calculate how many portfolios are possible, then draw random usize
+    fn random(algorithms: &[Algorithm], num_cores: u32, seed: u64) -> Self {
+        let single_threaded_algorithms =
+            algorithms.iter().filter(|&a| a.num_threads == 1);
+        let num_single_threaded_algorithms =
+            single_threaded_algorithms.clone().count() as u32;
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let num_algorithms_in_portfolio =
+            rng.gen_range(1..num_single_threaded_algorithms.min(num_cores));
+        let core_distribution_sample = (0..num_algorithms_in_portfolio - 1)
+            .map(|_| rng.gen_range(1..num_cores))
+            .sorted()
+            .collect_vec();
+        let cores_per_algorithm =
+            [core_distribution_sample.clone(), vec![num_cores]]
+                .concat()
+                .iter()
+                .zip([vec![0], core_distribution_sample].concat().iter())
+                .map(|(a, b)| a - b)
+                .collect_vec();
+        Self {
+            resource_assignments: single_threaded_algorithms
+                .zip(cores_per_algorithm.iter())
+                .map(|(a, v)| (a.clone(), *v as f64))
+                .collect_vec(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct DataframeConfig<'a> {
     pub schema: Schema,
@@ -192,4 +225,33 @@ pub struct Args {
     pub timeout: Option<Timeout>,
     #[arg(short = 'k', long)]
     pub num_cores: Option<u32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Algorithm;
+
+    use super::SolverResult;
+
+    #[test]
+    fn test_random_portfolio() {
+        let algorithms = vec![
+            Algorithm::new("algo1".into(), 1),
+            Algorithm::new("algo2".into(), 1),
+            Algorithm::new("algo3".into(), 1),
+            Algorithm::new("algo4".into(), 1),
+            Algorithm::new("algo5".into(), 2),
+        ];
+        for seed in 0..9 {
+            let result = SolverResult::random(&algorithms, 16, seed);
+            assert_eq!(
+                result
+                    .resource_assignments
+                    .iter()
+                    .map(|(_, c)| c)
+                    .sum::<f64>(),
+                16.0
+            );
+        }
+    }
 }
