@@ -6,21 +6,25 @@ use rand::prelude::*;
 pub fn simulation_df(
     df: &DataFrame,
     algorithms: &ndarray::Array1<Algorithm>,
-    portfolio: &SolverResult,
+    portfolios: &[Portfolio],
     num_seeds: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
 ) -> LazyFrame {
-    let portfolio_runs = simulate_portfolio_execution(
-        df,
-        portfolio,
-        num_seeds,
-        instance_fields,
-        algorithm_fields,
-        "portfolio",
-        num_cores,
-    );
+    let portfolio_runs = portfolios
+        .iter()
+        .map(|p| {
+            simulate_portfolio_execution(
+                df,
+                p,
+                num_seeds,
+                instance_fields,
+                algorithm_fields,
+                num_cores,
+            )
+        })
+        .collect_vec();
     let algorithm_portfolios = simulate_algorithms_as_portfolio(
         df,
         algorithms,
@@ -29,17 +33,20 @@ pub fn simulation_df(
         algorithm_fields,
         num_cores,
     );
-    concat(&[portfolio_runs, algorithm_portfolios], false, false)
-        .expect("Failed to combine simulation dataframe")
+    concat(
+        &[portfolio_runs, vec![algorithm_portfolios]].concat(),
+        false,
+        false,
+    )
+    .expect("Failed to combine simulation dataframe")
 }
 
 fn simulate_portfolio_execution(
     df: &DataFrame,
-    portfolio: &SolverResult,
+    portfolio: &Portfolio,
     num_seeds: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
-    portfolio_name: &str,
     num_cores: u32,
 ) -> LazyFrame {
     let runs = (0..num_seeds)
@@ -50,7 +57,7 @@ fn simulate_portfolio_execution(
                 instance_fields,
                 algorithm_fields,
                 num_cores,
-                portfolio_name,
+                &portfolio.name,
             )
         })
         .collect_vec();
@@ -68,7 +75,8 @@ fn simulate_algorithms_as_portfolio(
 ) -> LazyFrame {
     let algorithm_portfolios = algorithms
         .iter()
-        .map(|algo| SolverResult {
+        .map(|algo| Portfolio {
+            name: algo.algorithm.clone(),
             resource_assignments: vec![(algo.clone(), num_cores as f64)],
         })
         .map(|portfolio| {
@@ -78,7 +86,6 @@ fn simulate_algorithms_as_portfolio(
                 num_seeds,
                 instance_fields,
                 algorithm_fields,
-                &portfolio.resource_assignments[0].0.to_string(),
                 num_cores,
             )
         })
@@ -87,7 +94,7 @@ fn simulate_algorithms_as_portfolio(
         .expect("Failed to combine algorithm portfolio simulations")
 }
 
-fn simulate(df: &DataFrame, portfolio: &SolverResult, seed: u64) -> LazyFrame {
+fn simulate(df: &DataFrame, portfolio: &Portfolio, seed: u64) -> LazyFrame {
     let config = DataframeConfig::new();
     let explode_list = config
         .out_fields
@@ -175,7 +182,8 @@ mod tests {
             ..default_config()
         };
         let data = Data::new(&config);
-        let portfolio = SolverResult {
+        let portfolio = Portfolio {
+            name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
                 (
                     Algorithm {

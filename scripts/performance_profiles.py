@@ -256,12 +256,13 @@ if __name__ == '__main__':
     algos = commons.infer_algorithms_from_dataframe(df)
     instances = commons.infer_instances_from_dataframe(df)
     colors = commons.construct_new_color_mapping(algos)
+    final_portfolio_name = set(algos).intersection(set(["final_portfolio", "final_portfolio_opt"])).pop()
     for algo in algos:
-        if algo == "portfolio": continue
-        plot_name_prefix = f"{plot_name}_{algo}_{load_field}"
-        ratios_df = performance_profiles(["portfolio", algo], instances, df, objective=load_field)
+        if algo == final_portfolio_name: continue
+        plot_name_prefix = f"{plot_name}_{final_portfolio_name}_{algo}_{load_field}"
+        ratios_df = performance_profiles([final_portfolio_name, algo], instances, df, objective=load_field)
         plot(plot_name_prefix, ratios_df, colors=colors)
 
-    plot_name = f"{plot_name}_{load_field}"
+    plot_name = f"{plot_name}_{final_portfolio_name}_{load_field}"
     ratios_df = performance_profiles(algos, instances, df, objective=load_field)
     plot(plot_name, ratios_df, colors=colors)

@@ -45,13 +45,17 @@ fn main() -> Result<()> {
     let data = csv_parser::Data::new(&config);
     let df_config = DataframeConfig::new();
     println!("{data}");
-    let (initial_portfolio, portfolio) =
-        solver::solve(&data, k as usize, timeout);
-    println!("{portfolio}");
+    let OptimizationResult {
+        initial_portfolio,
+        final_portfolio,
+        gap: _,
+    } = solver::solve(&data, k as usize, timeout);
+    println!("{final_portfolio}");
+    let random_portfolio = Portfolio::random(&data.algorithms, num_cores, 42);
     let portfolio_simulation = portfolio_simulator::simulation_df(
         &data.df,
         &data.algorithms,
-        &portfolio,
+        &[final_portfolio.clone()],
         num_seeds,
         &df_config.instance_fields,
         &df_config.algorithm_fields,
@@ -62,23 +66,34 @@ fn main() -> Result<()> {
         &df_config,
         &(out_dir.to_owned() + "/simulation.csv"),
     );
+    let portfolios = {
+        let mut portfolios = vec![final_portfolio];
+        if args.random_portfolio {
+            portfolios.push(random_portfolio);
+        }
+        if args.initial_portfolio {
+            portfolios.push(initial_portfolio);
+        }
+        portfolios
+    };
     serde_json::to_writer_pretty(
         fs::File::create(out_dir.to_owned() + "/executor.json")?,
         &PortfolioExecutorConfig {
             files,
-            portfolio: portfolio.clone(),
+            portfolios: portfolios.clone(),
             num_seeds,
             num_cores,
             out: out_dir.to_owned() + "/execution.csv",
         },
     )?;
-    serde_json::to_writer_pretty(
-        fs::File::create(out_dir.clone() + "/portfolio.json")?,
-        &portfolio,
-    )?;
-    serde_json::to_writer_pretty(
-        fs::File::create(out_dir + "/initial_portfolio.json")?,
-        &initial_portfolio,
-    )?;
+    for portfolio in portfolios {
+        let portfolio_name = portfolio.name.replace("_opt", "");
+        serde_json::to_writer_pretty(
+            fs::File::create(
+                out_dir.clone() + "/" + portfolio_name.as_str() + ".json",
+            )?,
+            &portfolio,
+        )?;
+    }
     Ok(())
 }

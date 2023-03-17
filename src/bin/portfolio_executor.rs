@@ -8,7 +8,7 @@ fn main() -> Result<()> {
         .expect("Provided config file does not exist");
     let PortfolioExecutorConfig {
         files,
-        portfolio,
+        portfolios,
         num_seeds,
         num_cores,
         out,
@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let simulation = portfolio_simulator::simulation_df(
         &df,
         &algorithms,
-        &portfolio,
+        &portfolios,
         num_seeds,
         &df_config.instance_fields,
         &df_config.algorithm_fields,

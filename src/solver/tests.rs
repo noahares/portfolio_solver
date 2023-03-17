@@ -13,8 +13,9 @@ fn test_simple_model() {
     let k = config.num_cores;
     let data = Data::new(&config);
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()).1,
-        SolverResult {
+        solve(&data, k as usize, Timeout::default()).final_portfolio,
+        Portfolio {
+            name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
                 (
                     Algorithm {
@@ -48,8 +49,9 @@ fn test_seq_vs_par() {
     let k = config.num_cores;
     let data = Data::new(&config);
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()).1,
-        SolverResult {
+        solve(&data, k as usize, Timeout::default()).final_portfolio,
+        Portfolio {
+            name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
                 (
                     Algorithm {

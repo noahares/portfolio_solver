@@ -11,7 +11,7 @@ pub fn solve(
     data: &Data,
     num_cores: usize,
     timeout: Timeout,
-) -> (SolverResult, SolverResult) {
+) -> OptimizationResult {
     let mut model =
         Model::new("portfolio_model").expect("Failed to create Gurobi Model");
     model.set_param(param::NumericFocus, 1).unwrap();
@@ -108,8 +108,15 @@ pub fn solve(
             let sol = ctx.get_solution(b.iter())?;
             let obj = ctx.obj()?;
             let obj_bnd = ctx.obj_bnd()?;
-            let res =
-                postprocess_solution(sol, n, num_cores, &data.algorithms);
+            let opt = (obj / obj_bnd).abs() < f64::EPSILON;
+            let res = postprocess_solution(
+                sol,
+                n,
+                num_cores,
+                &data.algorithms,
+                "intermediate_portfolio",
+                opt,
+            );
             println!("{res}");
             dbg!(obj_bnd, obj);
         }
@@ -135,8 +142,14 @@ pub fn solve(
         initial_solution[i * num_cores + *v as usize - 1] = 1.0;
     }
 
-    let initial_portfolio =
-        postprocess_solution(initial_solution, n, num_cores, &data.algorithms);
+    let initial_portfolio = postprocess_solution(
+        initial_solution,
+        n,
+        num_cores,
+        &data.algorithms,
+        "initial_portfolio",
+        false,
+    );
     dbg!(&initial_portfolio);
     model
         .set_objective(objective_function, ModelSense::Minimize)
@@ -150,10 +163,21 @@ pub fn solve(
     let solution = model
         .get_obj_attr_batch(attr::X, b)
         .expect("Model execution failed, no solution");
-    let result =
-        postprocess_solution(solution, n, num_cores, &data.algorithms);
+    let gap = model.get_attr(attr::MIPGap).unwrap_or(f64::MAX);
+    let final_portfolio = postprocess_solution(
+        solution,
+        n,
+        num_cores,
+        &data.algorithms,
+        "final_portfolio",
+        gap.abs() < f64::EPSILON,
+    );
     dbg!(model.get_attr(attr::ObjVal).unwrap(), m);
-    (initial_portfolio, result)
+    OptimizationResult {
+        initial_portfolio,
+        final_portfolio,
+        gap,
+    }
 }
 
 fn postprocess_solution(
@@ -161,7 +185,9 @@ fn postprocess_solution(
     n: usize,
     num_cores: usize,
     algorithms: &ndarray::Array1<Algorithm>,
-) -> SolverResult {
+    portfolio_name: &str,
+    opt: bool,
+) -> Portfolio {
     let mut portfolio_selection = vec![0.0; n];
     for j in 0..n {
         for k in 0..num_cores {
@@ -174,7 +200,13 @@ fn postprocess_solution(
         .zip(portfolio_selection)
         .map(|(algo, cores)| (algo.clone(), cores))
         .collect_vec();
-    SolverResult {
+    let name = if opt {
+        [portfolio_name, "opt"].join("_")
+    } else {
+        portfolio_name.to_string()
+    };
+    Portfolio {
+        name,
         resource_assignments,
     }
 }
