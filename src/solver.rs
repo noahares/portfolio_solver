@@ -71,8 +71,13 @@ pub fn solve(
                 .grb_sum()
         })
         .grb_sum();
-    let _c_3 = model.add_constr("c3", c!(sums == num_cores));
-
+    let sum_constraint = if data.algorithms.iter().any(|a| a.num_threads == 1)
+    {
+        c!(sums == num_cores)
+    } else {
+        c!(sums <= num_cores)
+    };
+    let _c_3 = model.add_constr("c3", sum_constraint);
     // constraint 4
     let _c_4 = a
         .outer_iter()
@@ -237,7 +242,10 @@ fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
             .zip(steps)
             .fold(0, |acc, (v, s)| acc + *v as u32 * s);
     while remainder > 0 {
-        if let Some(highest_loss_idx) = losses
+        if steps.iter().all(|&s| s > remainder) {
+            return rounded;
+        }
+        let highest_loss_idx = losses
             .iter()
             .zip(steps)
             .position_max_by(|(l1, &s1), (l2, &s2)| {
@@ -249,13 +257,10 @@ fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
                     Ordering::Greater
                 }
             })
-        {
-            remainder -= steps[highest_loss_idx];
-            losses[highest_loss_idx] = 0.0;
-            rounded[highest_loss_idx] += 1.0;
-        } else {
-            break;
-        }
+            .expect("Error, no algorithms to round to sum");
+        remainder -= steps[highest_loss_idx];
+        losses[highest_loss_idx] = 0.0;
+        rounded[highest_loss_idx] += 1.0;
     }
     assert_eq!(
         rounded

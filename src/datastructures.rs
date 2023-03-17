@@ -128,6 +128,12 @@ impl Portfolio {
             .collect_vec();
         let num_single_threaded_algorithms =
             single_threaded_algorithms.len() as u32;
+        if num_single_threaded_algorithms == 0 {
+            return Self {
+                name: String::from("random_portfolio"),
+                resource_assignments: Vec::new(),
+            };
+        }
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let num_algorithms_in_portfolio = rng.gen_range(
             1..num_single_threaded_algorithms.min(num_cores) as usize,

@@ -14,6 +14,7 @@ pub fn simulation_df(
 ) -> LazyFrame {
     let portfolio_runs = portfolios
         .iter()
+        .filter(|p| !p.resource_assignments.is_empty())
         .map(|p| {
             simulate_portfolio_execution(
                 df,
