@@ -13,8 +13,9 @@ fn main() -> Result<()> {
     let config: QualityLowerBoundConfig = serde_json::from_str(&config_str)?;
     let paths = config.files;
 
-    let df_config = DataframeConfig::new();
-    let df = csv_parser::preprocess_df(&paths, &df_config)?.collect()?;
+    DF_CONFIG.set(DataframeConfig::new()).ok();
+    let df_config = DataframeConfig::global();
+    let df = csv_parser::preprocess_df(&paths, df_config)?.collect()?;
     let mut best_per_instance = csv_parser::best_per_instance(
         df.lazy(),
         &df_config.instance_fields,

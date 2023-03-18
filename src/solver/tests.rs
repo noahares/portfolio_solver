@@ -11,7 +11,7 @@ fn test_simple_model() {
         ..default_config()
     };
     let k = config.num_cores;
-    let data = Data::new(&config).unwrap();
+    let data = Data::new().unwrap();
     assert_eq!(
         solve(&data, k as usize, Timeout::default())
             .unwrap()
@@ -49,7 +49,7 @@ fn test_seq_vs_par() {
         ..default_config()
     };
     let k = config.num_cores;
-    let data = Data::new(&config).unwrap();
+    let data = Data::new().unwrap();
     assert_eq!(
         solve(&data, k as usize, Timeout::default())
             .unwrap()

@@ -15,8 +15,9 @@ fn main() -> Result<()> {
         out,
     } = serde_json::from_str(&config_str)?;
 
-    let df_config = DataframeConfig::new();
-    let df = csv_parser::preprocess_df(&files, &df_config)?.collect()?;
+    DF_CONFIG.set(DataframeConfig::new()).ok();
+    let df_config = DataframeConfig::global();
+    let df = csv_parser::preprocess_df(&files, df_config)?.collect()?;
     let algorithms = csv_parser::extract_algorithm_columns(
         &df,
         &df_config.algorithm_fields,
@@ -31,7 +32,7 @@ fn main() -> Result<()> {
         num_cores,
     )?;
     csv_parser::df_to_csv_for_performance_profiles(
-        simulation, &df_config, &out,
+        simulation, df_config, out,
     )?;
     Ok(())
 }

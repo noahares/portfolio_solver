@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use itertools::{izip, Itertools};
 use log::warn;
 use polars::prelude::*;
@@ -106,8 +108,11 @@ pub fn stats_by_sampling(
         .map(|f| col(f))
         .collect_vec();
 
-    let sort_order =
-        [DataframeConfig::new().sort_order, ["sample_size"].to_vec()].concat();
+    let sort_order = [
+        DataframeConfig::global().sort_order.clone(),
+        ["sample_size"].to_vec(),
+    ]
+    .concat();
     let sort_exprs = sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>();
     let sort_options =
         vec![false; instance_fields.len() + algorithm_fields.len() + 1];
@@ -235,7 +240,7 @@ pub fn best_per_instance_count(
 
 pub fn filter_desired_instances(
     df: LazyFrame,
-    graphs_path: &String,
+    graphs_path: &PathBuf,
     num_parts: &Vec<i64>,
     feasibility_thresholds: &Vec<f64>,
     instance_fields: &[&str],

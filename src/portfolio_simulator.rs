@@ -101,7 +101,7 @@ fn simulate(
     portfolio: &Portfolio,
     seed: u64,
 ) -> Result<LazyFrame> {
-    let config = DataframeConfig::new();
+    let config = DataframeConfig::global();
     let explode_list = config
         .out_fields
         .iter()
@@ -187,7 +187,7 @@ mod tests {
             ],
             ..default_config()
         };
-        let data = Data::new(&config).unwrap();
+        let data = Data::new().unwrap();
         let portfolio = Portfolio {
             name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![

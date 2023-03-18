@@ -5,7 +5,10 @@ use polars::{
     prelude::*,
     series::IsSorted,
 };
-use std::f64::EPSILON;
+use std::{
+    f64::EPSILON,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -34,7 +37,7 @@ impl fmt::Display for Data {
 }
 
 impl Data {
-    pub fn new(config: &Config) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let Config {
             files: paths,
             graphs: graphs_path,
@@ -45,8 +48,8 @@ impl Data {
             num_seeds: _,
             out_dir: _,
             timeout: _,
-        } = config.clone();
-        let df_config = DataframeConfig::new();
+        } = Config::global();
+        let df_config = DataframeConfig::global();
         let sort_exprs = df_config
             .sort_order
             .iter()
@@ -58,10 +61,10 @@ impl Data {
                 + df_config.algorithm_fields.len()
         ];
         let df = utils::filter_desired_instances(
-            preprocess_df(paths.as_ref(), &df_config)?,
-            &graphs_path,
-            &num_parts,
-            &feasibility_thresholds,
+            preprocess_df(paths, df_config)?,
+            graphs_path,
+            num_parts,
+            feasibility_thresholds,
             &df_config.instance_fields,
         )?
         .sort_by_exprs(&sort_exprs, &sort_options, false)
@@ -76,10 +79,10 @@ impl Data {
                 )
                 .filter(col("failed").eq(lit("no")))
                 .filter(col("timeout").eq(lit("no")))
-                .filter(col("num_threads").lt_eq(lit(k))),
+                .filter(col("num_threads").lt_eq(lit(*k))),
             &df_config.instance_fields,
             &df_config.algorithm_fields,
-            slowdown_ratio,
+            *slowdown_ratio,
         )?
         .sort_by_exprs(&sort_exprs, &sort_options, false)
         .collect()?;
@@ -148,7 +151,7 @@ impl Data {
         );
         let stats_df = utils::stats_by_sampling(
             valid_instance_df.lazy(),
-            k,
+            *k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,
         )?
@@ -156,7 +159,7 @@ impl Data {
 
         let clean_df = utils::cleanup_missing_rows(
             stats_df,
-            k,
+            *k,
             &df_config.instance_fields,
             &df_config.algorithm_fields,
         )?
@@ -168,9 +171,9 @@ impl Data {
             clean_df.column("instance").unwrap().is_sorted(),
             IsSorted::Ascending
         );
-        let shape = (num_instances, num_algorithms, k as usize);
+        let shape = (num_instances, num_algorithms, *k as usize);
         assert_eq!(
-            num_instances * num_algorithms * k as usize,
+            num_instances * num_algorithms * *k as usize,
             clean_df.height()
         );
         let stats: ndarray::Array3<f64> =
@@ -200,7 +203,7 @@ impl Data {
     }
 }
 
-pub fn preprocess_df<T: AsRef<str>>(
+pub fn preprocess_df<T: AsRef<Path>>(
     paths: &[T],
     config: &DataframeConfig,
 ) -> Result<LazyFrame> {
@@ -275,7 +278,7 @@ pub fn best_per_instance(
 pub fn df_to_csv_for_performance_profiles(
     df: LazyFrame,
     df_config: &DataframeConfig,
-    path: &str,
+    path: PathBuf,
 ) -> Result<()> {
     let mut out = std::fs::File::create(path)?;
     let mut out_df = df

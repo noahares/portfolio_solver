@@ -1,6 +1,7 @@
 use anyhow::Result;
 use core::fmt;
 use itertools::Itertools;
+use once_cell::sync::OnceCell;
 use polars::datatypes::*;
 use polars::prelude::Schema;
 use rand::prelude::*;
@@ -64,9 +65,9 @@ impl FromStr for Timeout {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
     #[serde(default)]
-    pub graphs: String,
+    pub graphs: PathBuf,
     #[serde(default = "default_ks")]
     pub ks: Vec<i64>,
     #[serde(default = "default_feasibility_thresholds")]
@@ -74,9 +75,39 @@ pub struct Config {
     pub num_cores: u32,
     pub slowdown_ratio: f64,
     pub num_seeds: u32,
-    pub out_dir: String,
+    pub out_dir: PathBuf,
     #[serde(default)]
     pub timeout: Timeout,
+}
+
+pub static CONFIG: OnceCell<Config> = OnceCell::new();
+
+impl Config {
+    pub fn global() -> &'static Config {
+        CONFIG.get().expect("config is not initialized")
+    }
+
+    pub fn from_cli(args: &Args) -> Result<Config> {
+        let config_path = &args.config;
+        let config_str = fs::read_to_string(config_path)?;
+        let mut config: Config = serde_json::from_str(&config_str)?;
+        if let Some(slowdown_ratio) = args.slowdown_ratio {
+            config.slowdown_ratio = slowdown_ratio;
+        }
+        if config.slowdown_ratio == 0.0 {
+            config.slowdown_ratio = std::u32::MAX as f64;
+        }
+        if let Some(out_dir) = &args.out_dir {
+            config.out_dir = out_dir.to_path_buf();
+        }
+        if let Some(timeout) = &args.timeout {
+            config.timeout = timeout.clone();
+        }
+        if let Some(num_cores) = args.num_cores {
+            config.num_cores = num_cores;
+        }
+        Ok(config)
+    }
 }
 
 fn default_ks() -> Vec<i64> {
@@ -95,11 +126,11 @@ pub struct QualityLowerBoundConfig {
 
 #[derive(Serialize, Deserialize)]
 pub struct PortfolioExecutorConfig {
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
     pub portfolios: Vec<Portfolio>,
     pub num_seeds: u32,
     pub num_cores: u32,
-    pub out: String,
+    pub out: PathBuf,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -180,6 +211,8 @@ pub struct DataframeConfig<'a> {
     pub sort_order: Vec<&'a str>,
 }
 
+pub static DF_CONFIG: OnceCell<DataframeConfig> = OnceCell::new();
+
 impl DataframeConfig<'_> {
     pub fn new() -> Self {
         let schema = Schema::from(
@@ -225,6 +258,11 @@ impl DataframeConfig<'_> {
             sort_order,
         }
     }
+    pub fn global() -> &'static DataframeConfig<'static> {
+        DF_CONFIG
+            .get()
+            .expect("dataframe config is not initialized")
+    }
 }
 
 impl Default for DataframeConfig<'_> {
@@ -234,7 +272,7 @@ impl Default for DataframeConfig<'_> {
 }
 
 use clap::Parser;
-use std::{path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 
 #[derive(Parser)]
 #[command(author, version, about)]
