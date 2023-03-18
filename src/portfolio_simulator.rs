@@ -1,4 +1,5 @@
 use crate::datastructures::*;
+use anyhow::Result;
 use itertools::Itertools;
 use polars::prelude::*;
 use rand::prelude::*;
@@ -11,7 +12,7 @@ pub fn simulation_df(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     let portfolio_runs = portfolios
         .iter()
         .filter(|p| !p.resource_assignments.is_empty())
@@ -25,6 +26,7 @@ pub fn simulation_df(
                 num_cores,
             )
         })
+        .filter_map(Result::ok)
         .collect_vec();
     let algorithm_portfolios = simulate_algorithms_as_portfolio(
         df,
@@ -33,13 +35,12 @@ pub fn simulation_df(
         instance_fields,
         algorithm_fields,
         num_cores,
-    );
-    concat(
+    )?;
+    Ok(concat(
         &[portfolio_runs, vec![algorithm_portfolios]].concat(),
         false,
         false,
-    )
-    .expect("Failed to combine simulation dataframe")
+    )?)
 }
 
 fn simulate_portfolio_execution(
@@ -49,21 +50,21 @@ fn simulate_portfolio_execution(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     let runs = (0..num_seeds)
-        .map(|seed| {
-            let simulation_df = simulate(df, portfolio, seed as u64);
-            portfolio_run_from_samples(
+        .map(|seed| -> Result<LazyFrame> {
+            let simulation_df = simulate(df, portfolio, seed as u64)?;
+            Ok(portfolio_run_from_samples(
                 simulation_df,
                 instance_fields,
                 algorithm_fields,
                 num_cores,
                 &portfolio.name,
-            )
+            ))
         })
+        .filter_map(Result::ok)
         .collect_vec();
-    concat(runs, false, false)
-        .expect("Failed to combine portfolio simulations")
+    Ok(concat(runs, false, false)?)
 }
 
 fn simulate_algorithms_as_portfolio(
@@ -73,7 +74,7 @@ fn simulate_algorithms_as_portfolio(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     num_cores: u32,
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     let algorithm_portfolios = algorithms
         .iter()
         .map(|algo| Portfolio {
@@ -90,12 +91,16 @@ fn simulate_algorithms_as_portfolio(
                 num_cores,
             )
         })
+        .filter_map(Result::ok)
         .collect_vec();
-    concat(algorithm_portfolios, false, false)
-        .expect("Failed to combine algorithm portfolio simulations")
+    Ok(concat(algorithm_portfolios, false, false)?)
 }
 
-fn simulate(df: &DataFrame, portfolio: &Portfolio, seed: u64) -> LazyFrame {
+fn simulate(
+    df: &DataFrame,
+    portfolio: &Portfolio,
+    seed: u64,
+) -> Result<LazyFrame> {
     let config = DataframeConfig::new();
     let explode_list = config
         .out_fields
@@ -131,8 +136,7 @@ fn simulate(df: &DataFrame, portfolio: &Portfolio, seed: u64) -> LazyFrame {
                 .with_column(lit(seed).alias("seed"))
         })
         .collect::<Vec<LazyFrame>>();
-    concat(samples, false, false)
-        .expect("Failed to build simulation dataframe")
+    Ok(concat(samples, false, false)?)
 }
 
 fn portfolio_run_from_samples(
@@ -164,6 +168,7 @@ fn portfolio_run_from_samples(
 
 #[cfg(test)]
 mod tests {
+
     use polars::prelude::IntoLazy;
 
     use crate::{
@@ -182,7 +187,7 @@ mod tests {
             ],
             ..default_config()
         };
-        let data = Data::new(&config);
+        let data = Data::new(&config).unwrap();
         let portfolio = Portfolio {
             name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
@@ -202,8 +207,10 @@ mod tests {
                 ),
             ],
         };
-        let simulation_df =
-            simulate(&data.df, &portfolio, 42).collect().unwrap();
+        let simulation_df = simulate(&data.df, &portfolio, 42)
+            .unwrap()
+            .collect()
+            .unwrap();
         assert_eq!(simulation_df.height(), 8);
         assert!(!simulation_df
             .column("algorithm")

@@ -1,7 +1,8 @@
 use itertools::{izip, Itertools};
+use log::warn;
 use polars::prelude::*;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::datastructures::*;
 
@@ -16,7 +17,7 @@ pub fn fix_instance_names(instance: &str) -> String {
 pub fn extract_instance_columns(
     df: &DataFrame,
     instance_fields: &[&str],
-) -> ndarray::Array1<Instance> {
+) -> Result<ndarray::Array1<Instance>> {
     let unique_instances_df = df
         .clone()
         .lazy()
@@ -24,36 +25,26 @@ pub fn extract_instance_columns(
             Some(instance_fields.iter().map(|s| s.to_string()).collect_vec()),
             UniqueKeepStrategy::First,
         )
-        .collect()
-        .expect("Failed to extract instance columns");
+        .collect()?;
     let instance_it = unique_instances_df
-        .column("instance")
-        .expect("No field `instance`")
-        .utf8()
-        .expect("Field `instance` should be a string")
+        .column("instance")?
+        .utf8()?
         .into_no_null_iter();
-    let k_it = unique_instances_df
-        .column("k")
-        .expect("No field `k`")
-        .i64()
-        .expect("Field `k` should be a integer")
-        .into_no_null_iter();
+    let k_it = unique_instances_df.column("k")?.i64()?.into_no_null_iter();
     let eps_it = unique_instances_df
-        .column("feasibility_threshold")
-        .expect("No field `feasibility_threshold`")
-        .f64()
-        .expect("Field `feasibility_threshold` should be a float")
+        .column("feasibility_threshold")?
+        .f64()?
         .into_no_null_iter();
-    ndarray::Array1::from_iter(
+    Ok(ndarray::Array1::from_iter(
         izip!(instance_it, k_it, eps_it)
             .map(|(i, k, e)| Instance::new(i.to_string(), k as u32, e)),
-    )
+    ))
 }
 
 pub fn extract_algorithm_columns(
     df: &DataFrame,
     algorithm_fields: &[&str],
-) -> ndarray::Array1<Algorithm> {
+) -> Result<ndarray::Array1<Algorithm>> {
     let unique_algorithm_df = df
         .clone()
         .lazy()
@@ -61,25 +52,20 @@ pub fn extract_algorithm_columns(
             Some(algorithm_fields.iter().map(|s| s.to_string()).collect_vec()),
             UniqueKeepStrategy::First,
         )
-        .collect()
-        .expect("Failed to extract instance columns");
+        .collect()?;
     let algorithm_it = unique_algorithm_df
-        .column("algorithm")
-        .expect("No field `algorithm`")
-        .utf8()
-        .expect("Field `algorithm` should be a string")
+        .column("algorithm")?
+        .utf8()?
         .into_no_null_iter();
     let num_threads = unique_algorithm_df
-        .column("num_threads")
-        .expect("No field `num_threads`")
-        .i64()
-        .expect("Field `num_threads` should be a integer")
+        .column("num_threads")?
+        .i64()?
         .into_no_null_iter();
-    ndarray::Array1::from_iter(
+    Ok(ndarray::Array1::from_iter(
         algorithm_it
             .zip(num_threads)
             .map(|(a, t)| Algorithm::new(a.to_string(), t as u32)),
-    )
+    ))
 }
 
 pub fn best_per_instance_time(
@@ -104,16 +90,8 @@ pub fn best_per_instance_time(
 pub fn column_to_f64_array(
     df: &DataFrame,
     column_name: &str,
-) -> ndarray::Array1<f64> {
-    df.column(column_name)
-        .unwrap_or_else(|_| panic!("Field `{}` not found", column_name))
-        .f64()
-        .expect("Expected column with type float")
-        .to_ndarray()
-        .unwrap_or_else(|_| {
-            panic!("Failed to extract column `{}`", column_name)
-        })
-        .to_owned()
+) -> Result<ndarray::Array1<f64>> {
+    Ok(df.column(column_name)?.f64()?.to_ndarray()?.to_owned())
 }
 
 pub fn stats_by_sampling(
@@ -121,7 +99,7 @@ pub fn stats_by_sampling(
     sample_size: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     let columns = [instance_fields, algorithm_fields]
         .concat()
         .iter()
@@ -144,9 +122,11 @@ pub fn stats_by_sampling(
                 .with_column(lit(s as u32).alias("sample_size"))
         })
         .collect();
-    concat(samples_per_repeats, false, false)
-        .expect("Failed to build E_min dataframe")
-        .sort_by_exprs(&sort_exprs, sort_options, false)
+    Ok(concat(samples_per_repeats, false, false)?.sort_by_exprs(
+        &sort_exprs,
+        sort_options,
+        false,
+    ))
 }
 
 pub fn cleanup_missing_rows(
@@ -154,18 +134,14 @@ pub fn cleanup_missing_rows(
     k: u32,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
-) -> DataFrame {
+) -> Result<DataFrame> {
     let algorithm_series = df
-        .select(algorithm_fields)
-        .expect("Cleanup failed due to `algorithm_fields`")
-        .unique_stable(None, UniqueKeepStrategy::First)
-        .expect("Cleanup failed due to `algorithm_fields`")
+        .select(algorithm_fields)?
+        .unique_stable(None, UniqueKeepStrategy::First)?
         .lazy();
     let instance_series = df
-        .select(instance_fields)
-        .expect("Cleanup failed due to `instance_fields`")
-        .unique_stable(None, UniqueKeepStrategy::First)
-        .expect("Cleanup failed due to `instance_fields`")
+        .select(instance_fields)?
+        .unique_stable(None, UniqueKeepStrategy::First)?
         .lazy();
     let possible_repeats = df! {
         "sample_size" => Vec::from_iter(1..=k)
@@ -174,14 +150,12 @@ pub fn cleanup_missing_rows(
     let full_df = instance_series
         .cross_join(algorithm_series)
         .cross_join(possible_repeats.lazy())
-        .collect()
-        .expect("Failed to create carthesian product dataframe");
+        .collect()?;
     let target_columns =
         [instance_fields, algorithm_fields, &["sample_size"]].concat();
-    df.outer_join(&full_df, &target_columns, &target_columns)
-        .expect("Failed to fill missing rows")
-        .fill_null(FillNullStrategy::MaxBound)
-        .expect("Failed to fix null values")
+    Ok(df
+        .outer_join(&full_df, &target_columns, &target_columns)?
+        .fill_null(FillNullStrategy::MaxBound)?)
 }
 
 pub fn filter_algorithms_by_slowdown(
@@ -189,7 +163,7 @@ pub fn filter_algorithms_by_slowdown(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     slowdown_ratio: f64,
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     let gmean = |s: Series| -> Result<Series, PolarsError> {
         let gmean = s.f64()?.into_no_null_iter().map(|v| v.ln()).sum::<f64>()
             / s.len() as f64;
@@ -201,13 +175,12 @@ pub fn filter_algorithms_by_slowdown(
         .select([col("best_time")
             .apply(gmean, GetOutput::from_type(DataType::Float64))
             .alias("gmean")])
-        .collect()
-        .expect("Failed to get gmean value")["gmean"]
-        .f64()
-        .unwrap()
+        .collect()?
+        .column("gmean")?
+        .f64()?
         .into_no_null_iter()
         .last()
-        .unwrap();
+        .context("empty dataframe")?;
     let filtered_df = df
         .clone()
         .groupby(algorithm_fields)
@@ -218,7 +191,7 @@ pub fn filter_algorithms_by_slowdown(
         .filter(
             col("gmean").lt(lit(slowdown_ratio * gmean_best_per_instance)),
         );
-    df.join(
+    Ok(df.join(
         filtered_df,
         algorithm_fields
             .iter()
@@ -229,7 +202,7 @@ pub fn filter_algorithms_by_slowdown(
             .map(|field| col(field))
             .collect_vec(),
         JoinType::Inner,
-    )
+    ))
 }
 
 pub fn best_per_instance_count(
@@ -237,13 +210,12 @@ pub fn best_per_instance_count(
     instance_fields: &[&str],
     algorithm_fields: &[&str],
     target_field: &str,
-) -> DataFrame {
+) -> Result<DataFrame> {
     let algorithm_series = df
-        .select(algorithm_fields)
-        .expect("Best per instance ranking failed due to `algorithm_fields`")
-        .unique_stable(None, UniqueKeepStrategy::First)
-        .expect("Best per instance ranking failed due to `algorithm_fields`");
-    df.lazy()
+        .select(algorithm_fields)?
+        .unique_stable(None, UniqueKeepStrategy::First)?;
+    Ok(df
+        .lazy()
         .groupby_stable(instance_fields)
         .agg([col("*")
             .sort_by(vec![col(target_field)], vec![false])
@@ -256,12 +228,9 @@ pub fn best_per_instance_count(
         )
         .groupby_stable(algorithm_fields)
         .agg([col("*"), count().alias("count").cast(DataType::Float64)])
-        .collect()
-        .expect("Error counting best per instance")
-        .outer_join(&algorithm_series, algorithm_fields, algorithm_fields)
-        .expect("Error filling best per instance count")
-        .fill_null(FillNullStrategy::Zero)
-        .expect("Error filling best per instance count")
+        .collect()?
+        .outer_join(&algorithm_series, algorithm_fields, algorithm_fields)?
+        .fill_null(FillNullStrategy::Zero)?)
 }
 
 pub fn filter_desired_instances(
@@ -270,30 +239,27 @@ pub fn filter_desired_instances(
     num_parts: &Vec<i64>,
     feasibility_thresholds: &Vec<f64>,
     instance_fields: &[&str],
-) -> LazyFrame {
+) -> Result<LazyFrame> {
     if let Ok(reader) = CsvReader::from_path(graphs_path) {
         let graph_df = reader
             .has_header(true)
-            .finish()
-            .expect("Failed to read graphs file")
+            .finish()?
             .lazy()
             .rename(["graph"], ["instance"]);
         let k_df = df! {
             "k" => num_parts
-        }
-        .unwrap();
+        }?;
         let eps_df = df! {
             "feasibility_threshold" => feasibility_thresholds
-        }
-        .unwrap();
-        df.join(
+        }?;
+        Ok(df.join(
             graph_df.cross_join(k_df.lazy()).cross_join(eps_df.lazy()),
             instance_fields.iter().map(|field| col(field)).collect_vec(),
             instance_fields.iter().map(|field| col(field)).collect_vec(),
             JoinType::Inner,
-        )
+        ))
     } else {
-        println!("Provided graph file not found, using all graphs");
-        df
+        warn!("Provided graph file not found, using all graphs");
+        Ok(df)
     }
 }

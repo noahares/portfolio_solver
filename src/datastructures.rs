@@ -255,6 +255,13 @@ pub struct Args {
     pub random_portfolio: bool,
 }
 
+#[derive(Parser)]
+#[command(author, version, about)]
+pub struct ConfigArgs {
+    #[arg(short, long)]
+    pub config: PathBuf,
+}
+
 #[cfg(test)]
 mod tests {
     use super::Algorithm;

@@ -29,3 +29,5 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 clap = { version = "4.1.8", features = ["derive"] }
 exitcode = "1.1.2"
+log = "0.4.17"
+env_logger = "0.10.0"

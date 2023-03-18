@@ -2,8 +2,10 @@ use std::cmp::Ordering;
 
 use crate::datastructures::*;
 use itertools::Itertools;
+use log::{debug, info};
 
 use crate::csv_parser::Data;
+use anyhow::{Context, Result};
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
@@ -11,12 +13,11 @@ pub fn solve(
     data: &Data,
     num_cores: usize,
     timeout: Timeout,
-) -> OptimizationResult {
-    let mut model =
-        Model::new("portfolio_model").expect("Failed to create Gurobi Model");
-    model.set_param(param::NumericFocus, 1).unwrap();
-    // model.set_param(param::SolFiles, "portfolio_model".to_string())?;
-    model.set_param(param::TimeLimit, timeout.0).unwrap();
+) -> Result<OptimizationResult> {
+    let mut model = Model::new("portfolio_model")?;
+    model.set_param(param::NumericFocus, 1)?;
+    model.set_param(param::OutputFlag, 0)?;
+    model.set_param(param::TimeLimit, timeout.0)?;
     let (n, m) = (data.num_algorithms, data.num_instances);
 
     let a =
@@ -122,8 +123,8 @@ pub fn solve(
                 "intermediate_portfolio",
                 opt,
             );
-            println!("{res}");
-            dbg!(obj_bnd, obj);
+            debug!("{res}");
+            debug!("Lower bound: {obj_bnd}\nCurrent objective value: {obj}");
         }
         Ok(())
     };
@@ -134,16 +135,14 @@ pub fn solve(
         &data.algorithms,
         m,
         num_cores,
-    )
+    )?
     .iter()
     .enumerate()
     {
         if v.abs() <= std::f64::EPSILON {
             continue;
         }
-        model
-            .set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)
-            .expect("Failed to set initial solution");
+        model.set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)?;
         initial_solution[i * num_cores + *v as usize - 1] = 1.0;
     }
 
@@ -155,19 +154,11 @@ pub fn solve(
         "initial_portfolio",
         false,
     );
-    dbg!(&initial_portfolio);
-    model
-        .set_objective(objective_function, ModelSense::Minimize)
-        .expect("Failed to set objective function");
-    model
-        .write("portfolio_model.lp")
-        .expect("Failed to write model output file");
-    model
-        .optimize_with_callback(&mut callback)
-        .expect("Error in solution callback");
-    let solution = model
-        .get_obj_attr_batch(attr::X, b)
-        .expect("Model execution failed, no solution");
+    info!("Initial portfolio:\n{initial_portfolio}");
+    model.set_objective(objective_function, ModelSense::Minimize)?;
+    model.write("portfolio_model.lp")?;
+    model.optimize_with_callback(&mut callback)?;
+    let solution = model.get_obj_attr_batch(attr::X, b)?;
     let gap = model.get_attr(attr::MIPGap).unwrap_or(f64::MAX);
     let final_portfolio = postprocess_solution(
         solution,
@@ -177,12 +168,15 @@ pub fn solve(
         "final_portfolio",
         gap.abs() < f64::EPSILON,
     );
-    dbg!(model.get_attr(attr::ObjVal).unwrap(), m);
-    OptimizationResult {
+    debug!(
+        "Final objective value: {}",
+        model.get_attr(attr::ObjVal).unwrap()
+    );
+    Ok(OptimizationResult {
         initial_portfolio,
         final_portfolio,
         gap,
-    }
+    })
 }
 
 fn postprocess_solution(
@@ -221,7 +215,7 @@ fn get_b_start(
     algorithms: &ndarray::Array1<Algorithm>,
     m: usize,
     num_cores: usize,
-) -> Vec<f64> {
+) -> Result<Vec<f64>> {
     let fractions = counts
         .iter()
         .zip(algorithms)
@@ -233,7 +227,11 @@ fn get_b_start(
     round_to_sum(&fractions, &steps, num_cores as u32)
 }
 
-fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
+fn round_to_sum(
+    fractions: &[f64],
+    steps: &Vec<u32>,
+    sum: u32,
+) -> Result<Vec<f64>> {
     let (mut rounded, mut losses): (Vec<f64>, Vec<f64>) =
         fractions.iter().map(|f| (f.floor(), f - f.floor())).unzip();
     let mut remainder = sum
@@ -243,7 +241,7 @@ fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
             .fold(0, |acc, (v, s)| acc + *v as u32 * s);
     while remainder > 0 {
         if steps.iter().all(|&s| s > remainder) {
-            return rounded;
+            return Ok(rounded);
         }
         let highest_loss_idx = losses
             .iter()
@@ -257,7 +255,7 @@ fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
                     Ordering::Greater
                 }
             })
-            .expect("Error, no algorithms to round to sum");
+            .context("no algorithms")?;
         remainder -= steps[highest_loss_idx];
         losses[highest_loss_idx] = 0.0;
         rounded[highest_loss_idx] += 1.0;
@@ -269,7 +267,7 @@ fn round_to_sum(fractions: &[f64], steps: &Vec<u32>, sum: u32) -> Vec<f64> {
             .fold(0, |acc, (v, s)| acc + *v as u32 * s),
         sum
     );
-    rounded
+    Ok(rounded)
 }
 
 #[cfg(test)]

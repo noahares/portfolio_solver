@@ -11,9 +11,11 @@ fn test_simple_model() {
         ..default_config()
     };
     let k = config.num_cores;
-    let data = Data::new(&config);
+    let data = Data::new(&config).unwrap();
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()).final_portfolio,
+        solve(&data, k as usize, Timeout::default())
+            .unwrap()
+            .final_portfolio,
         Portfolio {
             name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
@@ -47,9 +49,11 @@ fn test_seq_vs_par() {
         ..default_config()
     };
     let k = config.num_cores;
-    let data = Data::new(&config);
+    let data = Data::new(&config).unwrap();
     assert_eq!(
-        solve(&data, k as usize, Timeout::default()).final_portfolio,
+        solve(&data, k as usize, Timeout::default())
+            .unwrap()
+            .final_portfolio,
         Portfolio {
             name: "final_portfolio_opt".to_string(),
             resource_assignments: vec![
@@ -78,7 +82,7 @@ fn test_round_to_sum() {
     let steps = vec![1, 2, 4, 8, 1];
     let sum = 20;
     assert_eq!(
-        round_to_sum(&fractions, &steps, sum),
+        round_to_sum(&fractions, &steps, sum).unwrap(),
         vec![2.0, 2.0, 1.0, 1.0, 2.0]
     );
 }
