@@ -264,7 +264,10 @@ pub fn filter_desired_instances(
             JoinType::Inner,
         ))
     } else {
-        warn!("Provided graph file not found, using all graphs");
+        warn!(
+            "Provided graph file: {:?} not found, using all graphs",
+            graphs_path
+        );
         Ok(df)
     }
 }

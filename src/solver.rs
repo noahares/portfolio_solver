@@ -14,9 +14,13 @@ pub fn solve(
     num_cores: usize,
     timeout: Timeout,
 ) -> Result<OptimizationResult> {
-    let mut model = Model::new("portfolio_model")?;
+    let env = {
+        let mut env = grb::Env::empty()?;
+        env.set(param::OutputFlag, 0)?;
+        env.start()?
+    };
+    let mut model = Model::with_env("portfolio_model", &env)?;
     model.set_param(param::NumericFocus, 1)?;
-    model.set_param(param::OutputFlag, 0)?;
     model.set_param(param::TimeLimit, timeout.0)?;
     let (n, m) = (data.num_algorithms, data.num_instances);
 

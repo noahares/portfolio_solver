@@ -106,6 +106,21 @@ impl Config {
         if let Some(num_cores) = args.num_cores {
             config.num_cores = num_cores;
         }
+        if let Some(num_seeds) = args.num_seeds {
+            config.num_seeds = num_seeds;
+        }
+        if let Some(graphs) = &args.graphs {
+            config.graphs = graphs.to_path_buf();
+        }
+        if let Some(files) = &args.files {
+            config.files = files.to_vec();
+        }
+        if let Some(ks) = &args.ks {
+            config.ks = ks.to_vec();
+        }
+        if let Some(feasibility_thresholds) = &args.feasibility_thresholds {
+            config.feasibility_thresholds = feasibility_thresholds.to_vec();
+        }
         Ok(config)
     }
 }
@@ -120,8 +135,8 @@ fn default_feasibility_thresholds() -> Vec<f64> {
 
 #[derive(Serialize, Deserialize)]
 pub struct QualityLowerBoundConfig {
-    pub files: Vec<String>,
-    pub out: String,
+    pub files: Vec<PathBuf>,
+    pub out: PathBuf,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -167,10 +182,10 @@ impl Portfolio {
         }
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let num_algorithms_in_portfolio = rng.gen_range(
-            1..num_single_threaded_algorithms.min(num_cores) as usize,
+            1..=num_single_threaded_algorithms.min(num_cores) as usize,
         );
         let core_distribution_sample = (0..num_algorithms_in_portfolio - 1)
-            .map(|_| rng.gen_range(1..num_cores))
+            .map(|_| rng.gen_range(1..=num_cores))
             .sorted()
             .collect_vec();
         let cores_per_algorithm =
@@ -277,18 +292,43 @@ use std::{fs, path::PathBuf, str::FromStr};
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct Args {
+    /// Path to the json config
     #[arg(short, long)]
     pub config: PathBuf,
+    /// List of CSV files containing the input data
+    #[arg(short, long, value_delimiter = ' ', num_args = 0..)]
+    pub files: Option<Vec<PathBuf>>,
+    /// Filter instances by number of blocks (k)
+    #[arg(long, value_name = "k", value_delimiter = ' ', num_args = 0..)]
+    pub ks: Option<Vec<i64>>,
+    /// Filter instances by feasibility threshold (epsilon)
+    #[arg(long, value_name = "e", value_delimiter = ' ', num_args = 0..)]
+    pub feasibility_thresholds: Option<Vec<f64>>,
+    /// Path to a CSV file containing a list of graphs
+    #[arg(short, long, value_name = "FILE")]
+    pub graphs: Option<PathBuf>,
+    /// Filter algorithms to get a portfolio with gmean-expected slowdown
+    /// (Values < 1.0 mean speedup)
     #[arg(short, long)]
     pub slowdown_ratio: Option<f64>,
+    /// How often a portfolio run is sampled for each instance
     #[arg(short, long)]
+    pub num_seeds: Option<u32>,
+    /// Path to the output directory
+    #[arg(short, long, value_name = "DIR")]
     pub out_dir: Option<PathBuf>,
+    /// Timeout for the LP solver in seconds
     #[arg(short, long, value_parser)]
     pub timeout: Option<Timeout>,
+    /// Number of cores available to the portfolio
     #[arg(short = 'k', long)]
     pub num_cores: Option<u32>,
+    /// Write initial portfolio to output
+    /// (Only if different from final portfolio)
     #[arg(short, long)]
     pub initial_portfolio: bool,
+    /// Write random portfolio to output
+    /// (Only if at least 1 sequential algorithm remains after slowdown filtering)
     #[arg(short, long)]
     pub random_portfolio: bool,
 }
@@ -296,6 +336,7 @@ pub struct Args {
 #[derive(Parser)]
 #[command(author, version, about)]
 pub struct ConfigArgs {
+    /// Path to the json config
     #[arg(short, long)]
     pub config: PathBuf,
 }

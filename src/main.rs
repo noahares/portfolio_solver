@@ -23,8 +23,8 @@ fn main() -> Result<()> {
     let num_cores = config.num_cores;
     let timeout = config.timeout.clone();
     fs::create_dir(out_dir).ok();
-    let data = csv_parser::Data::new()?;
     DF_CONFIG.set(DataframeConfig::new()).ok();
+    let data = csv_parser::Data::new()?;
     let df_config = DataframeConfig::global();
     info!("{data}");
     let OptimizationResult {
@@ -49,12 +49,18 @@ fn main() -> Result<()> {
         out_dir.join("simulation.csv"),
     )?;
     let portfolios = {
+        let init_eq_final = initial_portfolio.resource_assignments
+            == final_portfolio.resource_assignments;
         let mut portfolios = vec![final_portfolio];
         if args.random_portfolio {
             portfolios.push(random_portfolio);
         }
         if args.initial_portfolio {
-            portfolios.push(initial_portfolio);
+            if init_eq_final {
+                info!("The final portfolio is equal to the initial portfolio. The initial portfolio will not be considered for portfolio execution.");
+            } else {
+                portfolios.push(initial_portfolio);
+            }
         }
         portfolios
     };
@@ -71,10 +77,7 @@ fn main() -> Result<()> {
     for portfolio in portfolios {
         let portfolio_name = portfolio.name.replace("_opt", "");
         serde_json::to_writer_pretty(
-            fs::File::create(
-                out_dir
-                    .join("/".to_owned() + portfolio_name.as_str() + ".json"),
-            )?,
+            fs::File::create(out_dir.join(portfolio_name + ".json"))?,
             &portfolio,
         )?;
     }
