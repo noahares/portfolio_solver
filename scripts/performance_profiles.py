@@ -86,8 +86,8 @@ def performance_profiles(algos, instances, input_df, objective="judiciousLoad"):
                 output.append((algo, i * performance_profile_fraction_scaling / n, r_prev))		# last occurence of r_prev
 
         # output.append((algo, (len(ratios[algo])-1) * performance_profile_fraction_scaling / n, ratios[algo][-1]))
-        # if all(x == 1.0 for x in ratios[algo]):
-        #     output.append((algo, 1.0, 1.0))
+        if all(x == 1.0 for x in ratios[algo]):
+            output.append((algo, 1.0, 1.0))
 
         # output.append((algo, len(ratios[algo]) * performance_profile_fraction_scaling / n, last_drawn_ratio))	# draw the step function to the rightmost x-value
 
@@ -244,14 +244,14 @@ if __name__ == '__main__':
     df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Q-F 4")].index, inplace=True)
     df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Q-F 8")].index, inplace=True)
     df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Q-F 16")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph 2")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph 4")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph 8")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph 16")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar 2")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar 4")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar 8")].index, inplace=True)
-    df.drop(df[df.algorithm.str.contains("MT-KaHyPar 16")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph-D 2")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph-D 4")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph-D 8")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-Graph-D 16")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-D 2")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-D 4")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-D 8")].index, inplace=True)
+    df.drop(df[df.algorithm.str.contains("MT-KaHyPar-D 16")].index, inplace=True)
 
     algos = commons.infer_algorithms_from_dataframe(df)
     instances = commons.infer_instances_from_dataframe(df)

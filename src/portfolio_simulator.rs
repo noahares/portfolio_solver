@@ -77,9 +77,22 @@ fn simulate_algorithms_as_portfolio(
 ) -> Result<LazyFrame> {
     let algorithm_portfolios = algorithms
         .iter()
-        .map(|algo| Portfolio {
-            name: algo.algorithm.clone(),
-            resource_assignments: vec![(algo.clone(), num_cores as f64)],
+        .filter(|a| a.num_threads <= num_cores)
+        .map(|algo| {
+            let num_samples = {
+                let num_samples = num_cores as f64 / algo.num_threads as f64;
+                if random::<f64>() >= num_samples - num_samples.floor() {
+                    num_samples.floor()
+                } else {
+                    num_samples.ceil()
+                }
+            };
+            Portfolio {
+                name: algo.algorithm.clone()
+                    + " "
+                    + algo.num_threads.to_string().as_str(),
+                resource_assignments: vec![(algo.clone(), num_samples)],
+            }
         })
         .map(|portfolio| {
             simulate_portfolio_execution(
@@ -112,14 +125,6 @@ fn simulate(
         .resource_assignments
         .iter()
         .map(|(algo, cores)| {
-            let num_samples = {
-                let num_samples = cores / algo.num_threads as f64;
-                if random::<f64>() >= num_samples - num_samples.floor() {
-                    num_samples.floor()
-                } else {
-                    num_samples.ceil()
-                }
-            } as usize;
             df.clone()
                 .lazy()
                 .filter(col("algorithm").eq(lit(algo.algorithm.clone())))
@@ -131,7 +136,12 @@ fn simulate(
                         .map(|f| col(f))
                         .collect_vec(),
                 )
-                .agg([col("*").sample_n(num_samples, true, true, Some(seed))])
+                .agg([col("*").sample_n(
+                    *cores as usize,
+                    true,
+                    true,
+                    Some(seed),
+                )])
                 .explode(explode_list.clone())
                 .with_column(lit(seed).alias("seed"))
         })
