@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap_verbosity_flag::Verbosity;
 use core::fmt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -331,6 +332,8 @@ pub struct Args {
     /// (Only if at least 1 sequential algorithm remains after slowdown filtering)
     #[arg(short, long)]
     pub random_portfolio: bool,
+    #[command(flatten)]
+    pub verbosity: Verbosity,
 }
 
 #[derive(Parser)]

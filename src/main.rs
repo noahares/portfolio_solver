@@ -9,8 +9,10 @@ use portfolio_solver::portfolio_simulator;
 use portfolio_solver::solver;
 
 fn main() -> Result<()> {
-    env_logger::init();
     let args = Args::parse();
+    env_logger::Builder::new()
+        .filter_level(args.verbosity.log_level_filter())
+        .init();
     let config = {
         let Ok(config) = Config::from_cli(&args) else { std::process::exit(exitcode::CONFIG); };
         CONFIG.set(config).ok();
