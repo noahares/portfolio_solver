@@ -60,13 +60,13 @@ fn generate_data(config: DataGeneratorConfig) -> Result<LazyFrame> {
     let algorithm_dataframes = config.algorithm_configs
         .iter()
         .enumerate()
-        .map(|(algo_idx, AlgorithmConfig { instance_range_configs })| -> Result<LazyFrame> {
-       let instance_dataframes = instance_range_configs
+        .map(|(algo_idx, AlgorithmConfig { instance_range_configs })| -> Result<Vec<LazyFrame>> {
+       Ok(instance_range_configs
            .iter()
-           .map(move |InstanceRangeConfig {mean, std, range}| -> Result<LazyFrame> {
+           .map(move |InstanceRangeConfig {mean, std, range}| -> Result<Vec<LazyFrame>> {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let distrib = Normal::new(*mean, (*mean * *std).abs())?;
-            let dataframes = range.clone()
+            Ok(range.clone()
                 .map(|i| -> Result<LazyFrame> {
                 let samples: Vec<f64> = distrib.sample_iter(&mut rng).take(runs_per_instance).collect();
                 Ok(df! {
@@ -78,19 +78,19 @@ fn generate_data(config: DataGeneratorConfig) -> Result<LazyFrame> {
                     "feasibility_score" => vec![0.0; runs_per_instance],
                     "quality" => samples,
                     "time" => vec![1.0; runs_per_instance],
-                    "failed" => vec![false; runs_per_instance],
-                    "timeout" => vec![false; runs_per_instance],
+                    "failed" => vec![String::from("no"); runs_per_instance],
+                    "timeout" => vec![String::from("no"); runs_per_instance],
                 }?.lazy())
             })
             .filter_map(Result::ok)
-            .collect::<Vec<LazyFrame>>();
-            Ok(concat(dataframes, false, false)?)
+            .collect())
        })
        .filter_map(Result::ok)
-       .collect::<Vec<LazyFrame>>();
-       Ok(concat(instance_dataframes, false, false)?)
+       .flatten()
+       .collect())
     })
     .filter_map(Result::ok)
+    .flatten()
     .collect::<Vec<LazyFrame>>();
     Ok(concat(algorithm_dataframes, false, false)?)
 }

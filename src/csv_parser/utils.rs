@@ -176,16 +176,23 @@ pub fn filter_algorithms_by_slowdown(
     };
     let best_per_instance_time_df =
         best_per_instance_time(df.clone(), instance_fields, "quality");
-    let gmean_best_per_instance = best_per_instance_time_df
-        .select([col("best_time")
-            .apply(gmean, GetOutput::from_type(DataType::Float64))
-            .alias("gmean")])
-        .collect()?
-        .column("gmean")?
-        .f64()?
-        .into_no_null_iter()
-        .last()
-        .context("empty dataframe")?;
+    let gmean_best_per_instance = {
+        let mut gmean_best_per_instance = best_per_instance_time_df
+            .select([col("best_time")
+                .apply(gmean, GetOutput::from_type(DataType::Float64))
+                .alias("gmean")])
+            .collect()?
+            .column("gmean")?
+            .f64()?
+            .into_no_null_iter()
+            .last()
+            .context("empty dataframe")?;
+        if gmean_best_per_instance < std::f64::EPSILON {
+            warn!("gmean of best algorithms per instance is {}. Setting it to 1.0", gmean_best_per_instance);
+            gmean_best_per_instance = 1.0;
+        }
+        gmean_best_per_instance
+    };
     let filtered_df = df
         .clone()
         .groupby(algorithm_fields)
