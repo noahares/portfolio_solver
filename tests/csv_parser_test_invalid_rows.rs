@@ -11,7 +11,6 @@ fn test_invalid_rows() {
         ..default_config()
     };
     CONFIG.set(config).ok();
-    DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = Data::new().unwrap();
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 1);

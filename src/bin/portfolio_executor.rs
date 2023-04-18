@@ -15,25 +15,18 @@ fn main() -> Result<()> {
         out,
     } = serde_json::from_str(&config_str)?;
 
-    DF_CONFIG.set(DataframeConfig::new()).ok();
-    let df_config = DataframeConfig::global();
     let df = csv_parser::parse_hypergraph_dataframe(&files, None, num_cores)?
         .collect()?;
-    let algorithms = csv_parser::extract_algorithm_columns(
-        &df,
-        &df_config.algorithm_fields,
-    )?;
+    let algorithms = csv_parser::extract_algorithm_columns(&df)?;
     let simulation = portfolio_simulator::simulation_df(
         &df,
         &algorithms,
         &portfolios,
         num_seeds,
         &["instance"],
-        &df_config.algorithm_fields,
+        &["algorithm", "num_threads"],
         num_cores,
     )?;
-    csv_parser::df_to_csv_for_performance_profiles(
-        simulation, df_config, out,
-    )?;
+    csv_parser::df_to_csv_for_performance_profiles(simulation, out)?;
     Ok(())
 }

@@ -24,7 +24,6 @@ fn main() -> Result<()> {
     let num_cores = config.num_cores;
     let timeout = config.timeout.clone();
     fs::create_dir(out_dir).ok();
-    DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = csv_parser::Data::new()?;
     info!("{data}");
     let OptimizationResult {

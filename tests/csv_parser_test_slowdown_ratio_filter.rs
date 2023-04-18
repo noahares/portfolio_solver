@@ -15,7 +15,6 @@ fn test_slowdown_ratio_filter() {
         ..default_config()
     };
     CONFIG.set(config).ok();
-    DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = Data::new().unwrap();
     assert_eq!(data.num_instances, 4);
     assert_eq!(data.num_algorithms, 2);

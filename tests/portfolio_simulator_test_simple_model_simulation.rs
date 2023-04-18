@@ -21,7 +21,6 @@ fn test_simple_model_simulation() {
     let k = config.num_cores;
     let paths = config.files.clone();
     CONFIG.set(config).ok();
-    DF_CONFIG.set(DataframeConfig::new()).ok();
     let df = csv_parser::parse_hypergraph_dataframe(&paths, None, k)
         .unwrap()
         .collect()

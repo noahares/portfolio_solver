@@ -3,8 +3,6 @@ use clap_verbosity_flag::Verbosity;
 use core::fmt;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
-use polars::datatypes::*;
-use polars::prelude::Schema;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
@@ -198,76 +196,6 @@ pub struct OptimizationResult {
     pub initial_portfolio: Portfolio,
     pub final_portfolio: Portfolio,
     pub gap: f64,
-}
-
-#[derive(Debug)]
-pub struct DataframeConfig<'a> {
-    pub schema: Schema,
-    pub in_fields: Vec<String>,
-    pub out_fields: Vec<&'a str>,
-    pub instance_fields: Vec<&'a str>,
-    pub algorithm_fields: Vec<&'a str>,
-    pub sort_order: Vec<&'a str>,
-}
-
-pub static DF_CONFIG: OnceCell<DataframeConfig> = OnceCell::new();
-
-impl DataframeConfig<'_> {
-    pub fn new() -> Self {
-        let schema = Schema::from(
-            vec![Field::new("km1", DataType::Float64)].into_iter(),
-        );
-        let kahypar_columns = vec![
-            "algorithm".to_string(),
-            "num_threads".into(),
-            "graph".into(),
-            "k".into(),
-            "epsilon".into(),
-            "imbalance".into(),
-            "km1".into(),
-            "totalPartitionTime".into(),
-            "failed".into(),
-            "timeout".into(),
-        ];
-        let target_columns = vec![
-            "algorithm",
-            "num_threads",
-            "instance",
-            "k",
-            "feasibility_threshold",
-            "feasibility_score",
-            "quality",
-            "time",
-            "failed",
-            "timeout",
-        ];
-        let instance_fields = vec!["instance", "k", "feasibility_threshold"];
-        let algorithm_fields = vec!["algorithm", "num_threads"];
-        let sort_order = {
-            let mut sort_order = instance_fields.clone();
-            sort_order.extend(&algorithm_fields);
-            sort_order
-        };
-        Self {
-            schema,
-            in_fields: kahypar_columns,
-            out_fields: target_columns,
-            instance_fields,
-            algorithm_fields,
-            sort_order,
-        }
-    }
-    pub fn global() -> &'static DataframeConfig<'static> {
-        DF_CONFIG
-            .get()
-            .expect("dataframe config is not initialized")
-    }
-}
-
-impl Default for DataframeConfig<'_> {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 use clap::Parser;

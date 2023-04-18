@@ -14,7 +14,6 @@ fn test_simple_model() {
     };
     let k = config.num_cores;
     CONFIG.set(config).ok();
-    DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = Data::new().unwrap();
     assert_eq!(
         solve(&data, k as usize, Timeout::default(), None)
