@@ -1,5 +1,9 @@
-use super::utils::{best_per_instance_count, stats_by_sampling};
-use crate::csv_parser::utils::filter_algorithms_by_slowdown;
+use std::path::PathBuf;
+
+use super::parse_hypergraph_dataframe;
+use super::utils::{
+    best_per_instance_count, filter_algorithms_by_slowdown, stats_by_sampling,
+};
 use crate::datastructures::{DataframeConfig, DF_CONFIG};
 use polars::prelude::*;
 
@@ -30,12 +34,10 @@ fn test_best_per_instance_count() {
 #[test]
 fn test_stats_by_sampling() {
     DF_CONFIG.set(DataframeConfig::new()).ok();
-    let instance_fields = &["instance", "k", "feasibility_threshold"];
+    let instance_fields = &["instance"];
     let algorithm_fields = &["algorithm", "num_threads"];
     let df = df! {
             "instance" => ["graph1", "graph1", "graph1", "graph1", "graph2", "graph2", "graph2", "graph2"],
-            "k" => vec![2; 8],
-            "feasibility_threshold" => vec![0.0; 8],
             "algorithm" => ["algo1", "algo1", "algo1", "algo1", "algo1", "algo1", "algo1", "algo1"],
             "num_threads" => vec![1; 8],
             "quality" => [10.0, 8.0, 9.0, 7.0, 20.0, 18.0, 22.0, 19.0],
@@ -77,5 +79,26 @@ fn test_algorithm_slowdown_filtering() {
     assert_eq!(
         filtered_df["algorithm"],
         Series::new("algorithm", &["algo3".to_string(), "algo3".into()])
+    );
+}
+
+#[test]
+fn test_hypergraph_parser() {
+    let k = 4;
+    let path = PathBuf::from("data/test/algo4.csv");
+    let df = parse_hypergraph_dataframe(&[path], None, k)
+        .unwrap()
+        .collect()
+        .unwrap();
+    assert_eq!(df.height(), 12);
+    assert_eq!(
+        df["valid"],
+        Series::new(
+            "valid",
+            &[
+                true, false, true, true, false, true, true, false, true, true,
+                false, true
+            ]
+        )
     );
 }

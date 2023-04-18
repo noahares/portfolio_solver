@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::datastructures::*;
 use itertools::Itertools;
-use log::{debug, info};
+use log::{debug, info, log_enabled};
 
 use crate::csv_parser::Data;
 use anyhow::{Context, Result};
@@ -13,10 +13,15 @@ pub fn solve(
     data: &Data,
     num_cores: usize,
     timeout: Timeout,
+    initial_resource_assignment: Option<Vec<f64>>,
 ) -> Result<OptimizationResult> {
     let env = {
+        let log_level = match log_enabled!(log::Level::Info) {
+            true => 1,
+            false => 0,
+        };
         let mut env = grb::Env::empty()?;
-        env.set(param::OutputFlag, 0)?;
+        env.set(param::OutputFlag, log_level)?;
         env.start()?
     };
     let mut model = Model::with_env("portfolio_model", &env)?;
@@ -134,15 +139,18 @@ pub fn solve(
     };
 
     let mut initial_solution = vec![0.0; n * num_cores];
-    for (i, v) in get_b_start(
-        &data.best_per_instance_count,
-        &data.algorithms,
-        m,
-        num_cores,
-    )?
-    .iter()
-    .enumerate()
-    {
+    let initial_assignment = initial_resource_assignment
+        .or_else(|| {
+            get_b_start(
+                &data.best_per_instance_count,
+                &data.algorithms,
+                m,
+                num_cores,
+            )
+            .ok()
+        })
+        .context("Failed to create initial resource assignment")?;
+    for (i, v) in initial_assignment.iter().enumerate() {
         if v.abs() <= std::f64::EPSILON {
             continue;
         }

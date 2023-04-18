@@ -31,7 +31,7 @@ plt.rcParams['text.latex.preamble'] = R'\usepackage{pifont}'
 def performance_profiles(algos, instances, input_df, objective="judiciousLoad"):
     df = input_df[input_df.algorithm.isin(algos)].copy()
 
-    instance_grouper = ["graph", "k", "epsilon"]
+    instance_grouper = ["instance"]
     index = df.groupby(instance_grouper + ["algorithm"]).mean()
     best_per_instance = index[objective].groupby(level=instance_grouper).min()
 
@@ -41,7 +41,6 @@ def performance_profiles(algos, instances, input_df, objective="judiciousLoad"):
     solved = defaultdict(list)
 
     for instance in instances:
-        G,k,eps = instance
 
         if not instance in best_per_instance:
             unsolved.add(instance)
@@ -53,13 +52,13 @@ def performance_profiles(algos, instances, input_df, objective="judiciousLoad"):
         best = best_per_instance.loc[instance]
 
         for algo in algos:
-            key = G,k,eps,algo
+            key = instance,algo
             solved[algo].append(instance)
             obj = index.loc[key][objective]
             if best != 0:
                 r = obj / best
                 if r < 1:
-                    print("r < 1", G, k, algo, obj, best, r)
+                    print("r < 1", instance, algo, obj, best, r)
             else:
                 if obj == 0:
                     r = 1
@@ -254,7 +253,7 @@ if __name__ == '__main__':
     df.drop(df[df.algorithm.str.contains("MT-KaHyPar-D 16")].index, inplace=True)
 
     algos = commons.infer_algorithms_from_dataframe(df)
-    instances = commons.infer_instances_from_dataframe(df)
+    instances = df.instance.unique()
     colors = commons.construct_new_color_mapping(algos)
     final_portfolio_name = set(algos).intersection(set(["final_portfolio", "final_portfolio_opt"])).pop()
     for algo in algos:

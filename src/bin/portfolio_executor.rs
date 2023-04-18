@@ -17,7 +17,8 @@ fn main() -> Result<()> {
 
     DF_CONFIG.set(DataframeConfig::new()).ok();
     let df_config = DataframeConfig::global();
-    let df = csv_parser::preprocess_df(&files, df_config)?.collect()?;
+    let df = csv_parser::parse_hypergraph_dataframe(&files, None, num_cores)?
+        .collect()?;
     let algorithms = csv_parser::extract_algorithm_columns(
         &df,
         &df_config.algorithm_fields,
@@ -27,7 +28,7 @@ fn main() -> Result<()> {
         &algorithms,
         &portfolios,
         num_seeds,
-        &df_config.instance_fields,
+        &["instance"],
         &df_config.algorithm_fields,
         num_cores,
     )?;

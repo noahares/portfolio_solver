@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use log::warn;
 use polars::prelude::*;
 
@@ -14,33 +14,6 @@ pub fn fix_instance_names(instance: &str) -> String {
     } else {
         instance.to_string()
     }
-}
-
-pub fn extract_instance_columns(
-    df: &DataFrame,
-    instance_fields: &[&str],
-) -> Result<ndarray::Array1<Instance>> {
-    let unique_instances_df = df
-        .clone()
-        .lazy()
-        .unique_stable(
-            Some(instance_fields.iter().map(|s| s.to_string()).collect_vec()),
-            UniqueKeepStrategy::First,
-        )
-        .collect()?;
-    let instance_it = unique_instances_df
-        .column("instance")?
-        .utf8()?
-        .into_no_null_iter();
-    let k_it = unique_instances_df.column("k")?.i64()?.into_no_null_iter();
-    let eps_it = unique_instances_df
-        .column("feasibility_threshold")?
-        .f64()?
-        .into_no_null_iter();
-    Ok(ndarray::Array1::from_iter(
-        izip!(instance_it, k_it, eps_it)
-            .map(|(i, k, e)| Instance::new(i.to_string(), k as u32, e)),
-    ))
 }
 
 pub fn extract_algorithm_columns(
@@ -108,11 +81,8 @@ pub fn stats_by_sampling(
         .map(|f| col(f))
         .collect_vec();
 
-    let sort_order = [
-        DataframeConfig::global().sort_order.clone(),
-        ["sample_size"].to_vec(),
-    ]
-    .concat();
+    let sort_order =
+        vec!["instance", "algorithm", "num_threads", "sample_size"];
     let sort_exprs = sort_order.iter().map(|o| col(o)).collect::<Vec<Expr>>();
     let sort_options =
         vec![false; instance_fields.len() + algorithm_fields.len() + 1];
@@ -245,36 +215,25 @@ pub fn best_per_instance_count(
         .fill_null(FillNullStrategy::Zero)?)
 }
 
-pub fn filter_desired_instances(
-    df: LazyFrame,
+pub fn get_desired_instances(
     graphs_path: &PathBuf,
     num_parts: &Vec<i64>,
     feasibility_thresholds: &Vec<f64>,
-    instance_fields: &[&str],
 ) -> Result<LazyFrame> {
     if let Ok(reader) = CsvReader::from_path(graphs_path) {
-        let graph_df = reader
-            .has_header(true)
-            .finish()?
-            .lazy()
-            .rename(["graph"], ["instance"]);
+        let graph_df = reader.has_header(true).finish()?.lazy();
         let k_df = df! {
             "k" => num_parts
         }?;
         let eps_df = df! {
-            "feasibility_threshold" => feasibility_thresholds
+            "epsilon" => feasibility_thresholds
         }?;
-        Ok(df.join(
-            graph_df.cross_join(k_df.lazy()).cross_join(eps_df.lazy()),
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            instance_fields.iter().map(|field| col(field)).collect_vec(),
-            JoinType::Inner,
-        ))
+        Ok(graph_df.cross_join(k_df.lazy()).cross_join(eps_df.lazy()))
     } else {
         warn!(
             "Provided graph file: {:?} not found, using all graphs",
             graphs_path
         );
-        Ok(df)
+        Err(anyhow::Error::msg("No graph file"))
     }
 }

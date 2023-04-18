@@ -27,7 +27,7 @@ serde_json = "1.0"
 anyhow = { version = "1.0.51", features = ["backtrace"] }
 itertools = "0.10.5"
 ndarray = "0.15.6"
-polars = { version = "0.26.1", features = ["lazy", "cross_join", "dtype-struct", "ndarray", "strings", "random"] }
+polars = { version = "0.26.1", features = ["lazy", "cross_join", "dtype-struct", "ndarray", "strings", "random", "concat_str"] }
 rand = "0.8.5"
 rand_distr = "0.4.3"
 rand_chacha = "0.3.1"

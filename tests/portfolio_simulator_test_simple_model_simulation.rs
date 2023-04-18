@@ -1,7 +1,7 @@
 use polars::prelude::IntoLazy;
 
 use portfolio_solver::{
-    csv_parser::Data,
+    csv_parser,
     datastructures::*,
     portfolio_simulator::{portfolio_run_from_samples, simulate},
 };
@@ -18,9 +18,14 @@ fn test_simple_model_simulation() {
         ],
         ..default_config()
     };
+    let k = config.num_cores;
+    let paths = config.files.clone();
     CONFIG.set(config).ok();
     DF_CONFIG.set(DataframeConfig::new()).ok();
-    let data = Data::new().unwrap();
+    let df = csv_parser::parse_hypergraph_dataframe(&paths, None, k)
+        .unwrap()
+        .collect()
+        .unwrap();
     let portfolio = Portfolio {
         name: "final_portfolio_opt".to_string(),
         resource_assignments: vec![
@@ -40,10 +45,8 @@ fn test_simple_model_simulation() {
             ),
         ],
     };
-    let simulation_df = simulate(&data.df, &portfolio, 42)
-        .unwrap()
-        .collect()
-        .unwrap();
+    let simulation_df =
+        simulate(&df, &portfolio, 42).unwrap().collect().unwrap();
     assert_eq!(simulation_df.height(), 8);
     assert!(!simulation_df
         .column("algorithm")
@@ -54,7 +57,7 @@ fn test_simple_model_simulation() {
         .any(|s| s == "algo1"));
     let portfolio_df = portfolio_run_from_samples(
         simulation_df.lazy(),
-        &["instance", "k", "feasibility_threshold"],
+        &["instance"],
         &["algorithm", "num_threads"],
         2,
         "portfolio",

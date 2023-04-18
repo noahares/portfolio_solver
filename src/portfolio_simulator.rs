@@ -114,13 +114,8 @@ pub fn simulate(
     portfolio: &Portfolio,
     seed: u64,
 ) -> Result<LazyFrame> {
-    let config = DataframeConfig::global();
-    let explode_list = config
-        .out_fields
-        .iter()
-        .filter(|s| !config.instance_fields.contains(s))
-        .cloned()
-        .collect_vec();
+    let explode_list =
+        vec!["algorithm", "num_threads", "quality", "time", "valid"];
     let samples = &portfolio
         .resource_assignments
         .iter()
@@ -129,13 +124,7 @@ pub fn simulate(
                 .lazy()
                 .filter(col("algorithm").eq(lit(algo.algorithm.clone())))
                 .filter(col("num_threads").eq(lit(algo.num_threads)))
-                .groupby_stable(
-                    config
-                        .instance_fields
-                        .iter()
-                        .map(|f| col(f))
-                        .collect_vec(),
-                )
+                .groupby_stable([col("instance")])
                 .agg([col("*").sample_n(
                     *cores as usize,
                     true,
@@ -156,22 +145,17 @@ pub fn portfolio_run_from_samples(
     num_cores: u32,
     algorithm: &str,
 ) -> LazyFrame {
-    df
-        // .filter(col("feasibility_score").lt_eq(lit(0.03)))
-        // .filter(col("failed").eq(lit("no")))
-        // .filter(col("timeout").eq(lit("no")))
-        .groupby(instance_fields)
-        .agg([
-            lit(algorithm).alias("algorithm"),
-            lit(num_cores).alias("num_threads"),
-            col("*")
-                .exclude(
-                    [instance_fields, algorithm_fields, &["quality", "time"]]
-                        .concat(),
-                )
-                .sort_by(vec![col("quality")], vec![false])
-                .first(),
-            min("quality"),
-            max("time"),
-        ])
+    df.groupby(instance_fields).agg([
+        lit(algorithm).alias("algorithm"),
+        lit(num_cores).alias("num_threads"),
+        col("*")
+            .exclude(
+                [instance_fields, algorithm_fields, &["quality", "time"]]
+                    .concat(),
+            )
+            .sort_by(vec![col("quality")], vec![false])
+            .first(),
+        min("quality"),
+        max("time"),
+    ])
 }

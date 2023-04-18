@@ -5,7 +5,6 @@ use std::fs;
 
 use portfolio_solver::csv_parser;
 use portfolio_solver::datastructures::*;
-use portfolio_solver::portfolio_simulator;
 use portfolio_solver::solver;
 
 fn main() -> Result<()> {
@@ -27,29 +26,14 @@ fn main() -> Result<()> {
     fs::create_dir(out_dir).ok();
     DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = csv_parser::Data::new()?;
-    let df_config = DataframeConfig::global();
     info!("{data}");
     let OptimizationResult {
         initial_portfolio,
         final_portfolio,
         gap: _,
-    } = solver::solve(&data, k as usize, timeout)?;
+    } = solver::solve(&data, k as usize, timeout, None)?;
     info!("Final portfolio:\n{final_portfolio}");
     let random_portfolio = Portfolio::random(&data.algorithms, num_cores, 42);
-    let portfolio_simulation = portfolio_simulator::simulation_df(
-        &data.df,
-        &data.algorithms,
-        &[final_portfolio.clone()],
-        num_seeds,
-        &df_config.instance_fields,
-        &df_config.algorithm_fields,
-        num_cores,
-    )?;
-    csv_parser::df_to_csv_for_performance_profiles(
-        portfolio_simulation,
-        df_config,
-        out_dir.join("simulation.csv"),
-    )?;
     let portfolios = {
         let init_eq_final = initial_portfolio.resource_assignments
             == final_portfolio.resource_assignments;

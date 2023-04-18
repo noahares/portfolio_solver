@@ -9,23 +9,6 @@ use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct Instance {
-    pub graph: String,
-    pub k: u32,
-    pub feasibility_threshold: f64,
-}
-
-impl Instance {
-    pub fn new(graph: String, k: u32, feasibility_threshold: f64) -> Self {
-        Self {
-            graph,
-            k,
-            feasibility_threshold,
-        }
-    }
-}
-
 #[derive(
     Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, PartialOrd,
 )]

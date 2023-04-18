@@ -18,7 +18,7 @@ fn test_seq_vs_par() {
     DF_CONFIG.set(DataframeConfig::new()).ok();
     let data = Data::new().unwrap();
     assert_eq!(
-        solve(&data, k as usize, Timeout::default())
+        solve(&data, k as usize, Timeout::default(), None)
             .unwrap()
             .final_portfolio,
         Portfolio {
