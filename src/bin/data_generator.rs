@@ -46,7 +46,7 @@ fn main() -> Result<()> {
         serde_json::from_str(&fs::read_to_string(args.config)?)?;
     let out_path = config.out_path.clone();
     let dataframe = generate_data(config)?;
-    csv_parser::df_to_csv_for_performance_profiles(dataframe, out_path)?;
+    csv_parser::df_to_normalized_csv(dataframe, out_path)?;
     Ok(())
 }
 

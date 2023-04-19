@@ -6,22 +6,15 @@ use portfolio_solver::{
     portfolio_simulator::{portfolio_run_from_samples, simulate},
 };
 use std::path::PathBuf;
-mod common;
-use common::*;
 
 #[test]
 fn test_simple_model_simulation() {
-    let config = Config {
-        files: vec![
-            PathBuf::from("data/test/algo1.csv"),
-            "data/test/algo2.csv".into(),
-        ],
-        ..default_config()
-    };
-    let k = config.num_cores;
-    let paths = config.files.clone();
-    CONFIG.set(config).ok();
-    let df = csv_parser::parse_hypergraph_dataframe(&paths, None, k)
+    let files = vec![
+        PathBuf::from("data/test/algo1.csv"),
+        "data/test/algo2.csv".into(),
+    ];
+    let k = 2;
+    let df = csv_parser::parse_normalized_csvs(&files, None, k)
         .unwrap()
         .collect()
         .unwrap();

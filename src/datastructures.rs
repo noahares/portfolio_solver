@@ -1,11 +1,10 @@
 use anyhow::Result;
-use clap_verbosity_flag::Verbosity;
 use core::fmt;
 use itertools::Itertools;
-use once_cell::sync::OnceCell;
 use rand::prelude::*;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(
     Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize, PartialOrd,
@@ -43,91 +42,6 @@ impl FromStr for Timeout {
     fn from_str(s: &str) -> Result<Self> {
         Ok(Self(s.parse::<f64>()?))
     }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Config {
-    pub files: Vec<PathBuf>,
-    #[serde(default)]
-    pub graphs: PathBuf,
-    #[serde(default = "default_ks")]
-    pub ks: Vec<i64>,
-    #[serde(default = "default_feasibility_thresholds")]
-    pub feasibility_thresholds: Vec<f64>,
-    pub num_cores: u32,
-    pub slowdown_ratio: f64,
-    pub num_seeds: u32,
-    pub out_dir: PathBuf,
-    #[serde(default)]
-    pub timeout: Timeout,
-}
-
-pub static CONFIG: OnceCell<Config> = OnceCell::new();
-
-impl Config {
-    pub fn global() -> &'static Config {
-        CONFIG.get().expect("config is not initialized")
-    }
-
-    pub fn from_cli(args: &Args) -> Result<Config> {
-        let config_path = &args.config;
-        let config_str = fs::read_to_string(config_path)?;
-        let mut config: Config = serde_json::from_str(&config_str)?;
-        if let Some(slowdown_ratio) = args.slowdown_ratio {
-            config.slowdown_ratio = slowdown_ratio;
-        }
-        if config.slowdown_ratio == 0.0 {
-            config.slowdown_ratio = std::u32::MAX as f64;
-        }
-        if let Some(out_dir) = &args.out_dir {
-            config.out_dir = out_dir.to_path_buf();
-        }
-        if let Some(timeout) = &args.timeout {
-            config.timeout = timeout.clone();
-        }
-        if let Some(num_cores) = args.num_cores {
-            config.num_cores = num_cores;
-        }
-        if let Some(num_seeds) = args.num_seeds {
-            config.num_seeds = num_seeds;
-        }
-        if let Some(graphs) = &args.graphs {
-            config.graphs = graphs.to_path_buf();
-        }
-        if let Some(files) = &args.files {
-            config.files = files.to_vec();
-        }
-        if let Some(ks) = &args.ks {
-            config.ks = ks.to_vec();
-        }
-        if let Some(feasibility_thresholds) = &args.feasibility_thresholds {
-            config.feasibility_thresholds = feasibility_thresholds.to_vec();
-        }
-        Ok(config)
-    }
-}
-
-fn default_ks() -> Vec<i64> {
-    vec![2, 4, 8, 16, 32, 64, 128]
-}
-
-fn default_feasibility_thresholds() -> Vec<f64> {
-    vec![0.03]
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct QualityLowerBoundConfig {
-    pub files: Vec<PathBuf>,
-    pub out: PathBuf,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PortfolioExecutorConfig {
-    pub files: Vec<PathBuf>,
-    pub portfolios: Vec<Portfolio>,
-    pub num_seeds: u32,
-    pub num_cores: u32,
-    pub out: PathBuf,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -193,66 +107,9 @@ impl Portfolio {
 }
 
 pub struct OptimizationResult {
-    pub initial_portfolio: Portfolio,
+    pub initial_portfolio: Option<Portfolio>,
     pub final_portfolio: Portfolio,
     pub gap: f64,
-}
-
-use clap::Parser;
-use std::{fs, path::PathBuf, str::FromStr};
-
-#[derive(Parser)]
-#[command(author, version, about)]
-pub struct Args {
-    /// Path to the json config
-    #[arg(short, long)]
-    pub config: PathBuf,
-    /// List of CSV files containing the input data
-    #[arg(short, long, value_delimiter = ' ', num_args = 0..)]
-    pub files: Option<Vec<PathBuf>>,
-    /// Filter instances by number of blocks (k)
-    #[arg(long, value_name = "k", value_delimiter = ' ', num_args = 0..)]
-    pub ks: Option<Vec<i64>>,
-    /// Filter instances by feasibility threshold (epsilon)
-    #[arg(long, value_name = "e", value_delimiter = ' ', num_args = 0..)]
-    pub feasibility_thresholds: Option<Vec<f64>>,
-    /// Path to a CSV file containing a list of graphs
-    #[arg(short, long, value_name = "FILE")]
-    pub graphs: Option<PathBuf>,
-    /// Filter algorithms to get a portfolio with gmean-expected slowdown
-    /// (Values < 1.0 mean speedup)
-    #[arg(short, long)]
-    pub slowdown_ratio: Option<f64>,
-    /// How often a portfolio run is sampled for each instance
-    #[arg(short, long)]
-    pub num_seeds: Option<u32>,
-    /// Path to the output directory
-    #[arg(short, long, value_name = "DIR")]
-    pub out_dir: Option<PathBuf>,
-    /// Timeout for the LP solver in seconds
-    #[arg(short, long, value_parser)]
-    pub timeout: Option<Timeout>,
-    /// Number of cores available to the portfolio
-    #[arg(short = 'k', long)]
-    pub num_cores: Option<u32>,
-    /// Write initial portfolio to output
-    /// (Only if different from final portfolio)
-    #[arg(short, long)]
-    pub initial_portfolio: bool,
-    /// Write random portfolio to output
-    /// (Only if at least 1 sequential algorithm remains after slowdown filtering)
-    #[arg(short, long)]
-    pub random_portfolio: bool,
-    #[command(flatten)]
-    pub verbosity: Verbosity,
-}
-
-#[derive(Parser)]
-#[command(author, version, about)]
-pub struct ConfigArgs {
-    /// Path to the json config
-    #[arg(short, long)]
-    pub config: PathBuf,
 }
 
 #[cfg(test)]

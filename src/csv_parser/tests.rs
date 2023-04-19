@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-
-use super::parse_hypergraph_dataframe;
 use super::utils::{
     best_per_instance_count, filter_algorithms_by_slowdown, stats_by_sampling,
 };
@@ -15,7 +12,7 @@ fn test_best_per_instance_count() {
             "num_threads" => vec![1; 6],
             "quality" => [1.0, 2.0, 2.0, 2.0, 1.0, 2.0],
         }.unwrap();
-    let ranking = best_per_instance_count(df, "quality").unwrap();
+    let ranking = best_per_instance_count(df).unwrap();
     assert_eq!(
         ranking["count"],
         Series::from_vec("count", vec![1.0, 1.0, 0.0])
@@ -57,26 +54,5 @@ fn test_algorithm_slowdown_filtering() {
     assert_eq!(
         filtered_df["algorithm"],
         Series::new("algorithm", &["algo3".to_string(), "algo3".into()])
-    );
-}
-
-#[test]
-fn test_hypergraph_parser() {
-    let k = 4;
-    let path = PathBuf::from("data/test/algo4.csv");
-    let df = parse_hypergraph_dataframe(&[path], None, k)
-        .unwrap()
-        .collect()
-        .unwrap();
-    assert_eq!(df.height(), 12);
-    assert_eq!(
-        df["valid"],
-        Series::new(
-            "valid",
-            &[
-                true, false, true, true, false, true, true, false, true, true,
-                false, true
-            ]
-        )
     );
 }

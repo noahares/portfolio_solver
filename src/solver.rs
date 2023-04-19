@@ -138,35 +138,37 @@ pub fn solve(
         Ok(())
     };
 
-    let mut initial_solution = vec![0.0; n * num_cores];
-    let initial_assignment = initial_resource_assignment
-        .or_else(|| {
-            get_b_start(
-                &data.best_per_instance_count,
-                &data.algorithms,
-                m,
-                num_cores,
-            )
-            .ok()
-        })
-        .context("Failed to create initial resource assignment")?;
-    for (i, v) in initial_assignment.iter().enumerate() {
-        if v.abs() <= std::f64::EPSILON {
-            continue;
+    let initial_portfolio = if let Some(initial_assignment) =
+        match (initial_resource_assignment, &data.best_per_instance_count) {
+            (Some(assignment), _) => Some(assignment),
+            (None, Some(counts)) => {
+                get_b_start(counts, &data.algorithms, m, num_cores).ok()
+            }
+            (None, None) => None,
+        } {
+        let mut initial_solution = vec![0.0; n * num_cores];
+        for (i, v) in initial_assignment.iter().enumerate() {
+            if v.abs() <= std::f64::EPSILON {
+                continue;
+            }
+            model.set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)?;
+            initial_solution[i * num_cores + *v as usize - 1] = 1.0;
         }
-        model.set_obj_attr(attr::Start, &b[(i, *v as usize - 1)], 1.0)?;
-        initial_solution[i * num_cores + *v as usize - 1] = 1.0;
-    }
 
-    let initial_portfolio = postprocess_solution(
-        initial_solution,
-        n,
-        num_cores,
-        &data.algorithms,
-        "initial_portfolio",
-        false,
-    );
-    info!("Initial portfolio:\n{initial_portfolio}");
+        let initial_portfolio = postprocess_solution(
+            initial_solution,
+            n,
+            num_cores,
+            &data.algorithms,
+            "initial_portfolio",
+            false,
+        );
+        info!("Initial portfolio:\n{initial_portfolio}");
+        Some(initial_portfolio)
+    } else {
+        info!("No initial portfolio provided");
+        None
+    };
     model.set_objective(objective_function, ModelSense::Minimize)?;
     model.write("portfolio_model.lp")?;
     model.optimize_with_callback(&mut callback)?;

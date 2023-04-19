@@ -7,14 +7,6 @@ use anyhow::{Context, Result};
 
 use crate::datastructures::*;
 
-pub fn fix_instance_names(instance: &str) -> String {
-    if instance.ends_with("scotch") {
-        instance.replace("scotch", "graph")
-    } else {
-        instance.to_string()
-    }
-}
-
 pub fn extract_algorithm_columns(
     df: &DataFrame,
 ) -> Result<ndarray::Array1<Algorithm>> {
@@ -39,6 +31,11 @@ pub fn extract_algorithm_columns(
             .zip(num_threads)
             .map(|(a, t)| Algorithm::new(a.to_string(), t as u32)),
     ))
+}
+
+pub fn best_per_instance(df: LazyFrame, target_field: &str) -> LazyFrame {
+    df.groupby_stable(["instance"])
+        .agg([min(target_field).prefix("best_")])
 }
 
 pub fn best_per_instance_time(df: LazyFrame) -> LazyFrame {
@@ -160,10 +157,7 @@ pub fn filter_algorithms_by_slowdown(
     ))
 }
 
-pub fn best_per_instance_count(
-    df: DataFrame,
-    target_field: &str,
-) -> Result<DataFrame> {
+pub fn best_per_instance_count(df: DataFrame) -> Result<DataFrame> {
     let algorithm_fields = [col("algorithm"), col("num_threads")];
     let algorithm_series = df
         .clone()
@@ -173,9 +167,7 @@ pub fn best_per_instance_count(
     Ok(df
         .lazy()
         .groupby_stable(["instance"])
-        .agg([col("*")
-            .sort_by(vec![col(target_field)], vec![false])
-            .first()])
+        .agg([col("*").sort_by(vec![col("quality")], vec![false]).first()])
         .select(&algorithm_fields)
         .groupby_stable(&algorithm_fields)
         .agg([col("*"), count().alias("count").cast(DataType::Float64)])
@@ -189,25 +181,14 @@ pub fn best_per_instance_count(
         .fill_null(FillNullStrategy::Zero)?)
 }
 
-pub fn get_desired_instances(
-    graphs_path: &PathBuf,
-    num_parts: &Vec<i64>,
-    feasibility_thresholds: &Vec<f64>,
-) -> Result<LazyFrame> {
-    if let Ok(reader) = CsvReader::from_path(graphs_path) {
-        let graph_df = reader.has_header(true).finish()?.lazy();
-        let k_df = df! {
-            "k" => num_parts
-        }?;
-        let eps_df = df! {
-            "epsilon" => feasibility_thresholds
-        }?;
-        Ok(graph_df.cross_join(k_df.lazy()).cross_join(eps_df.lazy()))
+pub fn get_desired_instances(path: &PathBuf) -> Result<LazyFrame> {
+    if let Ok(reader) = CsvReader::from_path(path) {
+        Ok(reader.has_header(true).finish()?.lazy())
     } else {
         warn!(
-            "Provided graph file: {:?} not found, using all graphs",
-            graphs_path
+            "Provided instances file: {:?} not found, using all instances",
+            path
         );
-        Err(anyhow::Error::msg("No graph file"))
+        Err(anyhow::Error::msg("No instances file"))
     }
 }

@@ -1,21 +1,17 @@
-use portfolio_solver::{csv_parser::Data, datastructures::*, solver::solve};
-mod common;
-use common::*;
+use portfolio_solver::{csv_parser, datastructures::*, solver::solve};
 use std::path::PathBuf;
 
 #[test]
 fn test_seq_vs_par() {
-    let config = Config {
-        files: vec![
-            PathBuf::from("data/test/algo1.csv"),
-            "data/test/algo7.csv".into(),
-        ],
-        num_cores: 8,
-        ..default_config()
-    };
-    let k = config.num_cores;
-    CONFIG.set(config).ok();
-    let data = Data::new().unwrap();
+    let files = vec![
+        PathBuf::from("data/test/algo1.csv"),
+        "data/test/algo7.csv".into(),
+    ];
+    let k = 8;
+    let df = csv_parser::parse_normalized_csvs(&files, None, k).unwrap();
+    let data =
+        csv_parser::Data::from_normalized_dataframe(df, k, std::f64::MAX)
+            .unwrap();
     assert_eq!(
         solve(&data, k as usize, Timeout::default(), None)
             .unwrap()
