@@ -7,6 +7,9 @@ use anyhow::{Context, Result};
 
 use crate::datastructures::*;
 
+/// Get a list of algorithms from the columns of a normalized data frame
+///
+/// The data frame must contain a string column `algorithm` and a integer column `num_threads`
 pub fn extract_algorithm_columns(
     df: &DataFrame,
 ) -> Result<ndarray::Array1<Algorithm>> {

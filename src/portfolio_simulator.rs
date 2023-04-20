@@ -4,6 +4,9 @@ use itertools::Itertools;
 use polars::prelude::*;
 use rand::prelude::*;
 
+/// Simulate execution of a portfolio
+///
+/// For each algorithm `num_seeds` runs will be sampled from the data frame for each instance
 pub fn simulation_df(
     df: &DataFrame,
     algorithms: &ndarray::Array1<Algorithm>,
@@ -109,7 +112,7 @@ fn simulate_algorithms_as_portfolio(
     Ok(concat(algorithm_portfolios, false, false)?)
 }
 
-pub fn simulate(
+fn simulate(
     df: &DataFrame,
     portfolio: &Portfolio,
     seed: u64,
@@ -138,7 +141,7 @@ pub fn simulate(
     Ok(concat(samples, false, false)?)
 }
 
-pub fn portfolio_run_from_samples(
+fn portfolio_run_from_samples(
     df: LazyFrame,
     instance_fields: &[&str],
     algorithm_fields: &[&str],
@@ -159,3 +162,6 @@ pub fn portfolio_run_from_samples(
         max("time"),
     ])
 }
+
+#[cfg(test)]
+mod tests;

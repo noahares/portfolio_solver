@@ -17,7 +17,7 @@ fn test_dataframe() {
     assert_eq!(data.num_algorithms, 2);
     assert_eq!(data.best_per_instance, arr1(&[16.0, 7.0, 18.0, 9.0]));
     assert_eq!(
-        data.stats.index_axis(Axis(2), 0),
+        data.expected_best_quality.index_axis(Axis(2), 0),
         aview2(&[[18.0, 16.0], [9.0, 7.0], [18.0, 22.0], [9.0, 9.0]])
     );
 }

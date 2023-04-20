@@ -1,23 +1,20 @@
-use polars::prelude::IntoLazy;
+use polars::prelude::*;
 
-use portfolio_solver::{
-    csv_parser,
+use crate::{
     datastructures::*,
     portfolio_simulator::{portfolio_run_from_samples, simulate},
 };
-use std::path::PathBuf;
 
 #[test]
 fn test_simple_model_simulation() {
-    let files = vec![
-        PathBuf::from("data/test/algo1.csv"),
-        "data/test/algo2.csv".into(),
-    ];
-    let k = 2;
-    let df = csv_parser::parse_normalized_csvs(&files, None, k)
-        .unwrap()
-        .collect()
-        .unwrap();
+    let df = df! {
+        "algorithm" => ["algo1", "algo1", "algo2", "algo2", "algo3", "algo3"],
+        "num_threads" => vec![1; 6],
+        "instance" => ["graph1", "graph2", "graph1", "graph2", "graph1", "graph2"],
+        "quality" => [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        "time" => [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        "valid" => vec![true; 6],
+    }.unwrap();
     let portfolio = Portfolio {
         name: "final_portfolio_opt".to_string(),
         resource_assignments: vec![
@@ -39,7 +36,7 @@ fn test_simple_model_simulation() {
     };
     let simulation_df =
         simulate(&df, &portfolio, 42).unwrap().collect().unwrap();
-    assert_eq!(simulation_df.height(), 8);
+    assert_eq!(simulation_df.height(), 4);
     assert!(!simulation_df
         .column("algorithm")
         .unwrap()
@@ -47,16 +44,30 @@ fn test_simple_model_simulation() {
         .unwrap()
         .into_no_null_iter()
         .any(|s| s == "algo1"));
+}
+
+#[test]
+fn test_simple_model_simulation_from_samples() {
+    let df = df! {
+        "algorithm" => ["algo2", "algo2", "algo2", "algo2"],
+        "num_threads" => vec![1; 4],
+        "instance" => ["graph1", "graph2", "graph1", "graph2"],
+        "quality" => [1.0, 2.0, 3.0, 4.0],
+        "time" => [1.0, 1.0, 1.0, 1.0],
+        "valid" => vec![true; 4],
+    }
+    .unwrap();
     let portfolio_df = portfolio_run_from_samples(
-        simulation_df.lazy(),
+        df.lazy(),
         &["instance"],
         &["algorithm", "num_threads"],
-        2,
+        4,
         "portfolio",
     )
     .collect()
     .unwrap();
-    assert_eq!(portfolio_df.height(), 4);
+    assert_eq!(portfolio_df.height(), 2);
+    dbg!(&portfolio_df);
     assert_eq!(
         portfolio_df
             .sort(["quality"], false)
@@ -67,6 +78,6 @@ fn test_simple_model_simulation() {
             .unwrap()
             .to_ndarray()
             .unwrap(),
-        ndarray::Array1::from_vec(vec![9.0, 11.0, 18.0, 24.0])
+        ndarray::Array1::from_vec(vec![1.0, 2.0])
     );
 }

@@ -9,6 +9,11 @@ use anyhow::{Context, Result};
 use grb::prelude::*;
 use ndarray::{Array1, Array2, Array3};
 
+/// Create a portfolio from the input data using the Gurobi Optimizer.
+///
+/// If no initial solution is provided, the solver will fall back to using a heuristic based on the
+/// `best_per_instance_count`s of the data. If this is not available, the solver is run without any
+/// initial solutions **(this may lead to significantly longer runtimes)**.
 pub fn solve(
     data: &Data,
     num_cores: usize,
@@ -43,7 +48,7 @@ pub fn solve(
     });
     let best_per_instance = &data.best_per_instance;
 
-    let e_min = &data.stats;
+    let e_min = &data.expected_best_quality;
 
     // constraint 1
     let _c_1 = a

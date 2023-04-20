@@ -11,12 +11,27 @@ pub use utils::extract_algorithm_columns;
 
 mod utils;
 
+/// Input data structure for the solver, parser for nomalized data frame is available.
 pub struct Data {
+    /// A list of algorithms to consider for the portfolio
     pub algorithms: ndarray::Array1<Algorithm>,
+    /// Contains the best quality for each instance
     pub best_per_instance: ndarray::Array1<f64>,
+    /// Contains the number of instances for each algorithm where it is the best,
+    /// used as heuristic for a initial solution for [`crate::solver::solve`] if none is provided explicitly
     pub best_per_instance_count: Option<ndarray::Array1<f64>>,
-    pub stats: ndarray::Array3<f64>,
+    /// Expected best quality for each instance for each algorithm for each possible number of
+    /// repetitions.
+    ///
+    /// Dimension 1: Instance,
+    ///
+    /// Dimension 2: Algorithm,
+    ///
+    /// Dimension 3: Repetitions
+    pub expected_best_quality: ndarray::Array3<f64>,
+    /// number of instances
     pub num_instances: usize,
+    /// number of algorithms
     pub num_algorithms: usize,
 }
 
@@ -27,6 +42,9 @@ impl fmt::Display for Data {
 }
 
 impl Data {
+    /// Create a new set of input data for [`crate::solver::solve`] from existing data.
+    /// This method is **not** advised, since order is very important here.
+    /// Once some refactoring is done, this will be easier.
     pub fn new(
         algorithms: &[Algorithm],
         best_per_instance: &[f64],
@@ -45,12 +63,16 @@ impl Data {
                 best_per_instance.to_vec(),
             ),
             best_per_instance_count,
-            stats: ndarray::Array3::from_shape_vec(shape, stats.to_vec())?,
+            expected_best_quality: ndarray::Array3::from_shape_vec(
+                shape,
+                stats.to_vec(),
+            )?,
             num_instances,
             num_algorithms,
         })
     }
 
+    /// Create a new set of input data for [`crate::solver::solve`] from a normalized data frame
     pub fn from_normalized_dataframe(
         df: LazyFrame,
         k: u32,
@@ -132,13 +154,29 @@ impl Data {
             algorithms,
             best_per_instance,
             best_per_instance_count: Some(best_per_instance_count),
-            stats,
+            expected_best_quality: stats,
             num_instances,
             num_algorithms,
         })
     }
 }
 
+/// Read normalized data from multiple input files.
+///
+/// Optionally, provide a path to a csv containing one column `instance` with instances to filter
+/// for.
+///
+/// Normalized csvs have the following header (types in parenthesis):
+///
+/// algorithm(str),num_threads(int),instance(str),quality(float),time(float),valid(bool)
+/// ```csv
+/// algorithm,num_threads,instance,quality,time,valid
+/// algo1,1,instance1,42.0,10.0,true
+/// algo1,1,instance2,40.0,10.5,false
+/// algo2,1,instance1,45.0,10.7,true
+/// algo2,2,instance2,41.0,10.3,true
+/// algo3,1,instance1,42.0,10.0,true
+/// ```
 pub fn parse_normalized_csvs(
     paths: &[PathBuf],
     desired_instances: Option<PathBuf>,
@@ -201,6 +239,7 @@ pub fn parse_normalized_csvs(
     concat(dataframes, true, true).map_err(anyhow::Error::from)
 }
 
+/// Helper to write a data frame to a file
 pub fn df_to_normalized_csv(df: LazyFrame, path: PathBuf) -> Result<()> {
     let mut out = std::fs::File::create(path)?;
     let mut out_df = df.collect()?;
