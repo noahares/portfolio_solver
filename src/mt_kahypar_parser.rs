@@ -176,13 +176,20 @@ pub fn parse_hypergraph_dataframe(
     let dataframes: Vec<LazyFrame> = paths
         .iter()
         .map(|path| match read_df(path, &columns) {
-            Ok(result) => result,
-            Err(_) => read_df(path, &fixed_in_fields)
-                .unwrap()
-                .with_column(lit(1_i64).alias("num_threads")),
+            Ok(result) => Ok(result),
+            Err(_) => match read_df(path, &fixed_in_fields) {
+                Ok(result) => {
+                    Ok(result.with_column(lit(1_i64).alias("num_threads")))
+                }
+                Err(err) => anyhow::bail!(err),
+            },
         })
+        .filter_map(Result::ok)
         .collect();
-    concat(dataframes, true, true).map_err(anyhow::Error::from)
+    match dataframes.is_empty() {
+        true => anyhow::bail!("Failed to parse data frames"),
+        false => concat(dataframes, true, true).map_err(anyhow::Error::from),
+    }
 }
 
 fn get_desired_instances(

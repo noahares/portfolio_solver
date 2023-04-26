@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     }) = mt_kahypar_parser::Config::from_cli(&args) else { std::process::exit(exitcode::CONFIG); };
     fs::create_dir(&out_dir).ok();
     let instance_filter = mt_kahypar_parser::InstanceFilter {
-        instance_path: graphs,
+        instance_path: graphs.clone(),
         ks,
         feasibility_thresholds,
     };
@@ -35,7 +35,10 @@ fn main() -> Result<()> {
         &files,
         Some(instance_filter),
         num_cores,
-    )?;
+    )
+    .or_else(|_| {
+        csv_parser::parse_normalized_csvs(&files, Some(graphs), num_cores)
+    })?;
     let data = csv_parser::Data::from_normalized_dataframe(
         df,
         num_cores,

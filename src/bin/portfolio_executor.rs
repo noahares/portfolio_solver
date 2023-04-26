@@ -26,10 +26,12 @@ fn main() -> Result<()> {
         out,
     } = serde_json::from_str(&config_str)?;
 
-    let df = mt_kahypar_parser::parse_hypergraph_dataframe(
-        &files, None, num_cores,
-    )?
-    .collect()?;
+    let df =
+        mt_kahypar_parser::parse_hypergraph_dataframe(&files, None, num_cores)
+            .or_else(|_| {
+                csv_parser::parse_normalized_csvs(&files, None, num_cores)
+            })?
+            .collect()?;
     let algorithms = csv_parser::extract_algorithm_columns(&df)?;
     let simulation = portfolio_simulator::simulation_df(
         &df,
