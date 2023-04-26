@@ -24,6 +24,7 @@
 //! use portfolio_solver::csv_parser;
 //! use portfolio_solver::datastructures;
 //! use portfolio_solver::solver;
+//! use portfolio_solver::portfolio_simulator;
 //! # use std::path::PathBuf;
 //! # use anyhow::Result;
 //!
@@ -42,13 +43,13 @@
 //!         )?;
 //!
 //!     let data = csv_parser::Data::from_normalized_dataframe(
-//!         df,
+//!         df.clone(),
 //!         num_cores,
 //!         slowdown_ratio,
 //!        )?;
 //!
 //!     let datastructures::OptimizationResult {
-//!         initial_portfolio: _,
+//!         initial_portfolio,
 //!         final_portfolio,
 //!         gap: _,
 //!         } = solver::solve(
@@ -62,9 +63,22 @@
 //!     // Especially useful for reading portfolios back from json for simulation
 //!     let output = serde_json::to_string(&final_portfolio)?;
 //!     println!("{}", output);
+//!
+//!     // simulate the portfolio
+//!     let algorithms = data.algorithms;
+//!     let simulated_df = portfolio_simulator::simulation_df(
+//!         &df.collect()?,
+//!         &algorithms,
+//!         &[initial_portfolio, final_portfolio], // portfolios to simulate
+//!         10, // number of seeds
+//!         &["instance"], // instance columns
+//!         &["algorithm", "num_threads"], // algorithm columns
+//!         num_cores,
+//!     )?;
+//!     // write the data frame to output.csv
+//!     csv_parser::df_to_normalized_csv(simulated_df, PathBuf::from("output.csv"))?;
 //!     Ok(())
 //! }
-//!
 //! ```
 
 /// Various helpers for csv parsing of normalized dataframes and creating the input for the
